@@ -818,6 +818,11 @@ test_plan_next_line_empty_when_complete() {
   assert_eq "" "$(plan_next_line "$AGENT_REPO/PLAN.md")" "no open tasks"
 }
 
+test_plan_counts_returns_two_fields_for_a_missing_plan() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_eq "0 0" "$(plan_counts "$AGENT_REPO/nope.md")" "missing plan still yields two numbers"
+}
+
 test_plan_tick_is_idempotent_on_checked_line() {
   local p; p="$(_fixture_plan)"
   plan_tick "$p" 3
@@ -873,7 +878,9 @@ plan_next_text() {
 
 plan_counts() {
   local plan="$1" done_n total_n
-  [ -f "$plan" ] || return 0
+  # Callers parse two fields, so a missing plan must still yield two numbers
+  # rather than an empty string.
+  [ -f "$plan" ] || { printf '0 0'; return 0; }
   done_n="$(awk '/^[[:space:]]*- \[[xX]\]/ { n++ } END { print n + 0 }' "$plan")"
   total_n="$(awk '/^[[:space:]]*- \[[ xX]\]/ { n++ } END { print n + 0 }' "$plan")"
   printf '%s %s' "$done_n" "$total_n"
@@ -1716,12 +1723,16 @@ test_codex_manifest_points_at_shared_skills() {
 }
 
 test_every_skill_has_name_and_description() {
-  local f
+  local f found
+  found=0
   for f in "$ROOT_DIR"/plugins/erict-skills/skills/*/SKILL.md; do
-    assert_eq "0" "$(head -1 "$f" | grep -c -- '---')" "$(basename "$(dirname "$f")") starts with frontmatter" 2>/dev/null || true
+    [ -f "$f" ] || continue
+    found=$((found + 1))
+    assert_eq "1" "$(head -1 "$f" | grep -c -- '---')" "$(basename "$(dirname "$f")") starts with frontmatter"
     assert_contains "$(head -20 "$f")" "name:" "$(basename "$(dirname "$f")") declares name"
     assert_contains "$(head -20 "$f")" "description:" "$(basename "$(dirname "$f")") declares description"
   done
+  assert_eq "1" "$([ "$found" -gt 0 ] && printf 1 || printf 0)" "at least one SKILL.md was found"
 }
 
 test_git_guard_blocks_when_preflight_tool_missing() {
