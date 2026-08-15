@@ -306,7 +306,8 @@ cfg_get() {
       "properties": {
         "branch_prefix": { "type": "string" },
         "worktree_root": { "type": "string" },
-        "auto_commit": { "type": "boolean" }
+        "auto_commit": { "type": "boolean" },
+        "default_branch": { "type": "string" }
       }
     },
     "human_gate": {
@@ -1201,7 +1202,12 @@ _git() {
 }
 
 vcs_default_branch() {
-  local ref
+  local ref explicit
+  explicit="$(cfg_get vcs.default_branch '')"
+  if [ -n "$explicit" ]; then
+    printf '%s' "$explicit"
+    return 0
+  fi
   ref="$(_git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
   if [ -n "$ref" ]; then
     printf '%s' "${ref#origin/}"
@@ -1209,7 +1215,6 @@ vcs_default_branch() {
   fi
   if _git show-ref --verify --quiet refs/heads/main; then printf 'main'; return 0; fi
   if _git show-ref --verify --quiet refs/heads/master; then printf 'master'; return 0; fi
-  printf 'main'
 }
 
 vcs_current_branch() {
@@ -1217,7 +1222,16 @@ vcs_current_branch() {
 }
 
 vcs_on_default_branch() {
-  [ "$(vcs_current_branch)" = "$(vcs_default_branch)" ]
+  local current default
+  current="$(vcs_current_branch)"
+  default="$(vcs_default_branch)"
+  if [ "$current" = "HEAD" ]; then
+    return 0
+  fi
+  if [ -z "$default" ]; then
+    return 0
+  fi
+  [ "$current" = "$default" ]
 }
 
 vcs_preflight() {
@@ -1233,8 +1247,19 @@ vcs_preflight() {
 }
 
 vcs_can_commit() {
-  if vcs_on_default_branch; then
-    printf 'refusing to commit on the default branch (%s)\n' "$(vcs_default_branch)" >&2
+  local current default
+  current="$(vcs_current_branch)"
+  default="$(vcs_default_branch)"
+  if [ "$current" = "HEAD" ]; then
+    printf 'refusing to commit: repository is in detached HEAD state\n' >&2
+    return 1
+  fi
+  if [ -z "$default" ]; then
+    printf 'refusing to commit: default branch is undeterminable. Set vcs.default_branch in .agent/config.json\n' >&2
+    return 1
+  fi
+  if [ "$current" = "$default" ]; then
+    printf 'refusing to commit on the default branch (%s)\n' "$default" >&2
     return 1
   fi
   if [ "$(cfg_get vcs.auto_commit 'true')" = "false" ]; then

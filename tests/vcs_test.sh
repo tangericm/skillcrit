@@ -49,3 +49,36 @@ test_commit_refuses_on_default_branch() {
   assert_fails "commit blocked on main" vcs_commit "feat: nope"
   assert_eq "1" "$(git -C "$AGENT_REPO" rev-list --count HEAD)" "no new commit"
 }
+
+test_can_commit_refuses_detached_head() {
+  AGENT_REPO="$(mktemp_repo)"
+  git -C "$AGENT_REPO" checkout -q HEAD
+  assert_fails "detached HEAD blocks commit" vcs_can_commit
+}
+
+test_undeterminable_default_branch_refuses_commit() {
+  AGENT_REPO="$(mktemp -d)"
+  git -C "$AGENT_REPO" init -q --initial-branch=trunk
+  git -C "$AGENT_REPO" config user.email "test@example.com"
+  git -C "$AGENT_REPO" config user.name "Test"
+  printf 'seed\n' > "$AGENT_REPO/README.md"
+  git -C "$AGENT_REPO" add -A
+  git -C "$AGENT_REPO" commit -q -m "chore: seed"
+  git -C "$AGENT_REPO" checkout -q -b feature/x
+  assert_fails "undeterminable default branch blocks commit" vcs_can_commit
+}
+
+test_default_branch_override_unblocks_commit() {
+  AGENT_REPO="$(mktemp -d)"
+  git -C "$AGENT_REPO" init -q --initial-branch=trunk
+  git -C "$AGENT_REPO" config user.email "test@example.com"
+  git -C "$AGENT_REPO" config user.name "Test"
+  printf 'seed\n' > "$AGENT_REPO/README.md"
+  git -C "$AGENT_REPO" add -A
+  git -C "$AGENT_REPO" commit -q -m "chore: seed"
+  git -C "$AGENT_REPO" checkout -q -b feature/x
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"vcs":{"default_branch":"trunk"}}\n' > "$AGENT_REPO/.agent/config.json"
+  vcs_can_commit
+  assert_eq "0" "$?" "explicit default_branch override permits commit"
+}

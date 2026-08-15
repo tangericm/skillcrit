@@ -40,7 +40,8 @@
       "properties": {
         "branch_prefix": { "type": "string" },
         "worktree_root": { "type": "string" },
-        "auto_commit": { "type": "boolean" }
+        "auto_commit": { "type": "boolean" },
+        "default_branch": { "type": "string" }
       }
     },
     "human_gate": {
