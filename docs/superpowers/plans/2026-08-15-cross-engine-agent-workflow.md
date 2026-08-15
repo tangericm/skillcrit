@@ -3144,6 +3144,241 @@ git commit -m "refactor: keep shell for gates, vcs and plan reads; move the rest
 
 ---
 
+### Task 18: Stateless entry point
+
+**Why:** installing the pack for real, after Task 17 shipped `148 passed, 0
+failed`, surfaced a critical architectural defect that no fixture caught.
+An agent's Bash tool calls do not share shell state — each call is a fresh
+process. A variable set, or a function sourced, in one call is gone in the
+next. Both `SKILL.md` files were written on the opposite assumption: they
+sourced `env.sh` once in a preamble and then called `detect_plan`,
+`plan_counts`, `state_get`, `gate_run`, `vcs_can_commit`, `adv_reconcile`,
+and others as though those functions stayed in scope afterward. In real use
+every one of them fails with `command not found`; `/status` breaks on its
+first invocation, in both engines. `tests/run.sh` never caught this because
+it sources every module into one long-lived shell — the harness's own
+convenience is exactly the situation that does not hold at runtime.
+
+A second, sharper-edged defect rode along: `env.sh` resolved its own
+directory with `${BASH_SOURCE[0]}`, which is empty under zsh — the shell the
+pack's owner runs. `dirname ""` is `.`, so `here` silently became the
+*current working directory* instead of the lib directory, and the very
+first source line failed: `no such file or directory: .../portable.sh`. Not
+sourcing under bash explicitly hid this in every manual check.
+
+**Files:**
+- Create: `plugins/agent-loop/bin/agent-loop`
+- Create: `tests/entry_test.sh`
+- Modify: `plugins/agent-loop/lib/env.sh` (resolve its own directory correctly under zsh)
+- Modify: `plugins/agent-loop/skills/session-state/SKILL.md` (discovery preamble; every library call rewritten)
+- Modify: `plugins/agent-loop/skills/adversarial-review/SKILL.md` (discovery preamble; every library call rewritten)
+- Modify: `plugins/agent-loop/commands/*.md` (six files: drop the stale `erict_env claude` instruction)
+
+**Interfaces:**
+- Consumes: `erict_env` and every `lib/*.sh` function from Tasks 1–17
+- Produces: `bin/agent-loop <claude|codex> <function> [args...]` — a single
+  executable that re-sources the whole library from a **fresh process on
+  every call**, exits non-zero exactly when the wrapped function does, and
+  passes stdout through unchanged so `$(agent-loop claude plan_counts
+  "$plan")` behaves like calling the function directly in a persistent
+  shell would. An unrecognized engine, a missing engine, a missing function
+  name, or an unrecognized function name all fail loudly (exit 2) rather
+  than falling through to a default or to the shell's own command lookup.
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/entry_test.sh` (excerpt — the full file also covers a different
+working directory, an unknown-engine rejection, and a failure-message
+pass-through; see the committed file for all of it):
+
+```bash
+#!/bin/bash
+AGENT_LOOP_BIN="$(cd "$AGENT_LOOP_LIB/../bin" && pwd)/agent-loop"
+
+test_wrapper_runs_a_function_from_a_fresh_process() {
+  local plan out
+  plan="$(_entry_fixture_plan)"
+  out="$("$AGENT_LOOP_BIN" claude plan_counts "$plan")"
+  assert_eq "1 3" "$out" "wrapper's plan_counts matches a direct call, from a fresh process"
+}
+
+test_wrapper_works_when_the_calling_shell_is_zsh() {
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf '  SKIP: zsh not available on this machine\n' >&2
+    return 0
+  fi
+  local plan out
+  plan="$(_entry_fixture_plan)"
+  out="$(zsh -c "bash '$AGENT_LOOP_BIN' claude plan_counts '$plan'")"
+  assert_eq "1 3" "$out" "zsh caller invoking the bash wrapper still gets the right answer"
+}
+
+test_sourcing_env_sh_directly_under_zsh_now_succeeds() {
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf '  SKIP: zsh not available on this machine\n' >&2
+    return 0
+  fi
+  local repo out
+  repo="$(mktemp_repo)"
+  out="$(cd "$repo" && zsh -c ". '$AGENT_LOOP_LIB/env.sh' && erict_env claude && printf 'engine=%s repo=%s' \"\$AGENT_ENGINE\" \"\$AGENT_REPO\"" 2>&1)"
+  assert_contains "$out" "engine=claude" "erict_env succeeded under zsh"
+}
+
+test_wrapper_rejects_an_unknown_engine() {
+  local plan; plan="$(_entry_fixture_plan)"
+  assert_fails "unknown engine fails loudly rather than defaulting" \
+    "$AGENT_LOOP_BIN" gemini plan_counts "$plan"
+}
+
+test_wrapper_propagates_a_nonzero_exit_from_the_underlying_function() {
+  local repo; repo="$(mktemp_repo)"
+  assert_fails "vcs_can_commit's refusal on main propagates through the wrapper" \
+    bash -c "cd '$repo' && '$AGENT_LOOP_BIN' claude vcs_can_commit"
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `bash tests/run.sh`
+Expected: FAIL — `agent-loop: No such file or directory`, and the
+direct-zsh-sourcing test fails with `no such file or directory:
+.../portable.sh`.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plugins/agent-loop/bin/agent-loop` (`chmod +x`):
+
+```bash
+#!/usr/bin/env bash
+# Self-contained entry point for the agent-loop library.
+#
+# An agent's Bash tool calls do NOT share shell state: each call is a fresh
+# process, so a variable set or a function sourced in one call is gone in
+# the next. This wrapper re-sources the whole library on every invocation.
+set -u
+
+usage() {
+  printf 'usage: %s <claude|codex> <function> [args...]\n' "$(basename "$0")" >&2
+}
+
+lib="$(cd "$(dirname "$0")/../lib" && pwd)"
+. "$lib/env.sh"
+
+engine="${1:-}"
+case "$engine" in
+  claude|codex) ;;
+  "")
+    printf 'agent-loop: missing engine argument\n' >&2
+    usage; exit 2 ;;
+  *)
+    printf 'agent-loop: unknown engine: %s (expected claude or codex)\n' "$engine" >&2
+    usage; exit 2 ;;
+esac
+shift
+
+fn="${1:-}"
+if [ -z "$fn" ]; then
+  printf 'agent-loop: missing function name\n' >&2
+  usage; exit 2
+fi
+shift
+
+erict_env "$engine" || exit 1
+
+if [ "$(type -t "$fn" 2>/dev/null)" != "function" ]; then
+  printf 'agent-loop: unknown library function: %s\n' "$fn" >&2
+  exit 2
+fi
+
+"$fn" "$@"
+```
+
+In `plugins/agent-loop/lib/env.sh`, `${BASH_SOURCE[0]}` is empty under zsh —
+but the fix cannot simply be `${BASH_SOURCE[0]:-$0}` read *inside*
+`erict_env`, because zsh resets `$0` to a function's own name the instant
+that function starts running (`FUNCTION_ARGZERO`, on by default); by the
+time `erict_env` runs, `$0` is `erict_env`, not the path to `env.sh`. The
+fix has to capture the directory **before** any function runs — at the top
+level of the file, in the moment it is sourced, which is the one point
+where bash's `BASH_SOURCE[0]` and zsh's `$0` both still correctly hold the
+file's own path:
+
+```bash
+_erict_env_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
+erict_env() {
+  local engine="${1:-unknown}" here="$_erict_env_lib_dir"
+  AGENT_ENGINE="$engine"
+  . "$here/portable.sh"
+  portable_require || return 1
+  ...
+}
+```
+
+- [ ] **Step 4: Rewrite both `SKILL.md` procedures**
+
+Replace the source-once preamble in
+`plugins/agent-loop/skills/session-state/SKILL.md` and
+`plugins/agent-loop/skills/adversarial-review/SKILL.md` with a discovery
+step that finds `bin/agent-loop` once:
+
+```bash
+find ~/.claude/plugins ~/.codex/plugins -path '*agent-loop*' -name agent-loop -type f -perm -u+x 2>/dev/null
+```
+
+State plainly why: every Bash call is a fresh process, so nothing may rely
+on a prior source *or* on a shell variable surviving to the next command —
+`AGENT_LOOP_BIN="..."` set in one call is exactly as gone in the next call
+as a sourced function would be. Instruct the agent to treat the discovered
+path as literal text substituted into every later command
+(`` `<agent-loop>` `` in the prose), never as a variable reference.
+
+Convert every bare function reference into `<agent-loop> <engine>
+<function> [args...]`. Session-state: `detect_plan` (×4, across `/plan`,
+`/status`, `/next`, `/auto`), `plan_bootstrap`, `state_get`, `plan_counts`,
+`plan_next_text`, `plan_next_line` (×3), `cfg_get human_gate.glob` /
+`cfg_get human_gate.marker`, `state_lock_ok`, `vcs_preflight`,
+`gate_level_for`, `gate_run` (×2, including the `cfg_get
+gate_policy.halt_requires full` it used to receive as a nested substitution
+— now two sequential calls), `vcs_commit`, `state_stamp` (×2), `state_get` /
+`state_section` (read-back), `detect_gate suite`, `cfg_get
+vcs.branch_prefix agent/`, `cfg_get vcs.worktree_root .worktrees`.
+Adversarial-review: `adv_check_counterpart`, `vcs_default_branch`,
+`state_get plan`, `cfg_get review.rules`, `adv_counterpart_cmd`,
+`adv_reconcile`. Preserve every existing rule's wording exactly — the two
+non-configurable safety rules, refute-not-assess, the three reconciliation
+buckets, never-average, `--self`/explicit-identity routing and its
+rationale, loud failure on a missing counterpart, `/auto` bootstrapping a
+plan then stopping while `/next` continues, `/handoff parallel` refusing
+rather than guessing, and the read-only wording distinguishing Codex's
+sandbox flag from Claude-side instruction-only enforcement — only the call
+syntax changes.
+
+Update the six `plugins/agent-loop/commands/*.md` shims: each said "Call
+`erict_env claude`", which no longer means anything the agent can execute.
+Replace with a pointer at the skill's own discovery procedure instead of
+re-describing it.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `bash tests/run.sh`
+Expected: PASS — tally grows from `148 passed, 0 failed` to `157 passed, 0
+failed`. Reverting only the `env.sh` fix reproduces `156 passed, 1 failed`,
+confirming `tests/entry_test.sh` actually exercises the zsh defect rather
+than passing vacuously.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add plugins/agent-loop/bin/agent-loop plugins/agent-loop/lib/env.sh \
+  plugins/agent-loop/skills/session-state/SKILL.md \
+  plugins/agent-loop/skills/adversarial-review/SKILL.md \
+  plugins/agent-loop/commands tests/entry_test.sh
+git commit -m "fix: make every library invocation self-contained across fresh processes and zsh"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Every spec section maps to a task: distribution → 10; three
