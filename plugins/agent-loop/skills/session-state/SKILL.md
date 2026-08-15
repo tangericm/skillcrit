@@ -59,8 +59,12 @@ anything. It holds the project's own discipline, and it overrides this file.
 
 ## Two rules that are never relaxed
 
-1. Never commit while `HEAD` is the default branch. `vcs_can_commit` enforces it.
-2. `/auto` never merges and never pushes.
+1. Never commit while `HEAD` is the default branch. `vcs_can_commit`
+   code-enforces it.
+2. `/auto` never merges and never pushes. This rule is **instruction-enforced
+   only** — no function in `lib/*.sh` runs `git merge` or `git push`, let
+   alone blocks them. Nothing stops a merge or push commanded outside this
+   procedure; the guarantee holds only as long as this document is followed.
 
 ## `.agent/state.md` is last-writer-wins within a host
 

@@ -17,10 +17,6 @@
 # without env.sh.
 _adversarial_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
-adv_key() {
-  printf '%s' "$1" | jq -r '"\(.file):\(.line):\(.category)"'
-}
-
 # adv_reconcile <self_file> <self_engine> <counterpart_file> <counterpart_engine>
 #
 # Labels are explicit arguments, never inferred from argument position.

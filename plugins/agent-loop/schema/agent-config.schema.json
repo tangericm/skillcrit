@@ -9,8 +9,7 @@
       "additionalProperties": false,
       "properties": {
         "glob": { "type": "string" },
-        "active": { "type": ["string", "null"] },
-        "task_marker": { "type": "string" }
+        "active": { "type": ["string", "null"] }
       }
     },
     "gates": {

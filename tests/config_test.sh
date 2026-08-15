@@ -3,7 +3,7 @@
 
 test_cfg_get_returns_default_when_no_config() {
   AGENT_REPO="$(mktemp_repo)"
-  assert_eq "- [ ]" "$(cfg_get plan.task_marker '- [ ]')" "default when file absent"
+  assert_eq "- [ ]" "$(cfg_get plan.marker '- [ ]')" "default when file absent"
   assert_eq "" "$(cfg_file)" "cfg_file empty when absent"
 }
 

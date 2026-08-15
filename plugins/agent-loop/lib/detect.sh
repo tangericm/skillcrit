@@ -2,7 +2,6 @@
 # Discovers plans and gates in a repository with no configuration.
 
 DETECT_PLAN_LOCATIONS='docs/superpowers/plans docs/plans docs/tasks .'
-DETECT_PLAN_ROOTFILES='PLAN.md TODO.md'
 
 _detect_has_open_task() {
   grep -qE '^[[:space:]]*- \[ \]' "$1" 2>/dev/null
@@ -44,13 +43,6 @@ detect_plan() {
       if [ "$mtime" -ge "$newest_mtime" ]; then newest="$f"; newest_mtime="$mtime"; fi
     done
     [ -n "$newest" ] && { printf '%s' "$newest"; return 0; }
-  done
-
-  for f in $DETECT_PLAN_ROOTFILES; do
-    [ -f "$repo/$f" ] || continue
-    _detect_has_open_task "$repo/$f" || continue
-    printf '%s' "$repo/$f"
-    return 0
   done
 }
 

@@ -1,6 +1,10 @@
 #!/bin/bash
-# Safety rails. Two rules here are deliberately not configurable:
-# never commit on the default branch, and never merge or push.
+# Safety rails. vcs_can_commit code-enforces one non-configurable rule:
+# never commit while HEAD is the default branch. "/auto never merges and
+# never pushes" is the other non-configurable rule, but nothing in this
+# file (or anywhere else in the pack) enforces it in code — see
+# skills/session-state/SKILL.md, which states it is instruction-enforced
+# only.
 
 _git() {
   git -C "${AGENT_REPO:-.}" "$@"
@@ -31,19 +35,6 @@ vcs_default_branch() {
 
 vcs_current_branch() {
   _git rev-parse --abbrev-ref HEAD 2>/dev/null
-}
-
-vcs_on_default_branch() {
-  local current default
-  current="$(vcs_current_branch)"
-  default="$(vcs_default_branch)"
-  if [ "$current" = "HEAD" ]; then
-    return 0
-  fi
-  if [ -z "$default" ]; then
-    return 0
-  fi
-  [ "$current" = "$default" ]
 }
 
 vcs_preflight() {
