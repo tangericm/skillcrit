@@ -72,6 +72,13 @@ adv_check_counterpart() {
 
 adv_counterpart_cmd() {
   local self="$1" prompt_file="$2" out_file="$3" schema other
+  # BASH_SOURCE[0] is reliable here because this function is only ever
+  # reached through bin/agent-loop (see erict_env in env.sh), and that entry
+  # point always execs bash — never zsh — so bash's stack-based BASH_SOURCE
+  # resolves correctly from inside a function regardless of caller shell.
+  # (Contrast env.sh's erict_env, which a caller may also reach by sourcing
+  # env.sh directly under zsh; that path needs the top-level $0 capture — see
+  # env.sh's comment.)
   schema="$(cd "$(dirname "${BASH_SOURCE[0]}")/../schema" && pwd)/findings.schema.json"
   other="$(adv_counterpart "$self")" || return 1
   case "$other" in
