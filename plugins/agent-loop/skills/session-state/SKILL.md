@@ -13,18 +13,37 @@ description: >
 
 # Session state
 
-Every command begins by sourcing the library. Run this first, always:
+**Every Bash tool call is a fresh process.** An agent's shell does not carry
+state from one tool call to the next the way an interactive shell does —
+variables, sourced functions, anything set in one call is gone by the next.
+`AGENT_LOOP_LIB="..."` set in one command, or a function pulled into scope by
+`. env.sh` in one command, will not exist in the command after it. So nothing
+below may rely on a prior `source`, and nothing below may rely on a shell
+variable surviving between commands either — that variable would be exactly
+the same mistake in a different shape.
+
+## Discover the entry point once
+
+Run this once, at the start of the session:
 
 ```bash
-AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
-  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
-. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
+find ~/.claude/plugins ~/.codex/plugins -path '*agent-loop*' -name agent-loop -type f -perm -u+x 2>/dev/null
 ```
 
-Neither engine guarantees a variable naming the skill's own directory, and the
-pack lives under a different cache path in each. Discovery is the portable
-answer; export `AGENT_LOOP_LIB` once and reuse it for the rest of the session.
+It prints one absolute path to the `agent-loop` executable. From here on,
+`` `<agent-loop>` `` in this document always means **that literal path,
+written out as text** — not a variable reference, since a variable would not
+survive to the next tool call. Every command below has the shape:
+
+```bash
+<agent-loop> claude <function> [args...]   # or: <agent-loop> codex ...
+```
+
+Each of those invocations is itself a self-contained fresh process, and that
+is deliberate, not incidental: `agent-loop` re-sources the entire library
+from scratch on every single call, so there is nothing to keep alive between
+them and nothing lost by not keeping it alive. It exits non-zero exactly
+when the underlying function does, and passes stdout through unchanged.
 
 Read `.agent/rules.md` (or whatever `review.rules` names) before implementing
 anything. It holds the project's own discipline, and it overrides this file.
@@ -39,14 +58,16 @@ anything. It holds the project's own discipline, and it overrides this file.
 Creates a plan when none exists, so `/next` and `/auto` always have something to
 navigate. **Never invents work** — the goal comes from the user.
 
-1. Run `detect_plan`. If it finds an open plan, report it and stop. Do not
-   create a second one; competing plans are how a cursor goes stale.
+1. Run `<agent-loop> claude detect_plan`. If it finds an open plan, report it
+   and stop. Do not create a second one; competing plans are how a cursor
+   goes stale.
 2. If the user gave no goal, ask for one. One question, then proceed.
 3. **Delegate when a real planning skill is installed.** Check for
    `superpowers:writing-plans` and use it — it produces far better plans than a
    template. Use `superpowers:brainstorming` first when the goal is vague enough
    that the design is not yet settled.
-4. **Otherwise fall back** to `plan_bootstrap "<dir>/<YYYY-MM-DD>-<slug>.md" "<goal>"`,
+4. **Otherwise fall back** to
+   `<agent-loop> claude plan_bootstrap "<dir>/<YYYY-MM-DD>-<slug>.md" "<goal>"`,
    where `<dir>` is the first existing path among `docs/superpowers/plans`,
    `docs/plans`, or the repository root. Then expand the skeleton into real
    checkbox steps in the same turn — a one-line plan is not a plan.
@@ -58,38 +79,46 @@ This pack does not reimplement planning. It only guarantees a plan exists.
 
 Read-only. Never writes, never commits.
 
-1. `state_get plan` — if empty, run `detect_plan` and report what you *would*
-   adopt without adopting it. If `detect_plan` is also empty, say so and point
-   at `/plan`.
-2. `plan_counts "$plan"` and `plan_next_text "$plan"`.
-3. Check the human gate: if `human_gate.glob` is set, grep those files for
-   `human_gate.marker`.
+1. `<agent-loop> claude state_get plan` — if empty, run
+   `<agent-loop> claude detect_plan` and report what you *would* adopt
+   without adopting it. If that is also empty, say so and point at `/plan`.
+2. `<agent-loop> claude plan_counts "$plan"` and
+   `<agent-loop> claude plan_next_text "$plan"`.
+3. Check the human gate: run `<agent-loop> claude cfg_get human_gate.glob ''`;
+   if it prints a non-empty glob, grep those files for the marker from
+   `<agent-loop> claude cfg_get human_gate.marker ''`.
 4. Report position, next step, blockers, branch, and gate status in under ten
-   lines. If the cursor's `task` disagrees with `plan_next_line`, say so — the
-   plan was edited by hand and the cursor is stale.
+   lines. If the cursor's `task` disagrees with
+   `<agent-loop> claude plan_next_line "$plan"`, say so — the plan was
+   edited by hand and the cursor is stale.
 
 ## /next
 
 Execute exactly one task, then stop.
 
-1. **Preflight.** `state_lock_ok` and `vcs_preflight` must both pass. If a human
-   gate is open, halt and say which document blocks. If `detect_plan` is empty,
-   run the `/plan` procedure above rather than failing, then continue.
+1. **Preflight.** `<agent-loop> claude state_lock_ok` and
+   `<agent-loop> claude vcs_preflight` must both pass. If a human gate is
+   open, halt and say which document blocks. If
+   `<agent-loop> claude detect_plan` is empty, run the `/plan` procedure
+   above rather than failing, then continue. Then run
+   `<agent-loop> claude plan_next_line "$plan"` and hold onto that line
+   number — step 6 must edit that exact line.
 2. **Read** only the current task's section of the plan.
 3. **Implement** following the project's testing discipline from the rules file.
-4. **Gate.** `gate_level_for <changed files>` then `gate_run <level>`.
-5. **Commit** on green with `vcs_commit`.
+4. **Gate.** `<agent-loop> claude gate_level_for <changed files>` to get the
+   level, then `<agent-loop> claude gate_run "<level>"`.
+5. **Commit** on green with `<agent-loop> claude vcs_commit "<message>"`.
 6. **Record.** Edit the plan file directly: change the current task's
    `- [ ]` to `- [x]`, on the exact line `plan_next_line "$plan"` gave you in
    step 1. Match that line precisely and leave the surrounding text alone —
    this is a hand edit, not a search-and-replace across the file. Write the
    project's task report if it defines one.
 
-   Then run `state_stamp` and use the Write tool to compose `.agent/state.md`
-   yourself, substituting the six stamped lines verbatim and filling `plan`,
-   `task`, and `total_tasks` from what you already hold (the active plan path
-   from `detect_plan`, the task you just completed plus one, and
-   `plan_counts`'s second field):
+   Then run `<agent-loop> claude state_stamp` and use the Write tool to
+   compose `.agent/state.md` yourself, substituting the six stamped lines
+   verbatim and filling `plan`, `task`, and `total_tasks` from what you
+   already hold (the active plan path from `detect_plan`, the task you just
+   completed plus one, and `plan_counts`'s second field):
 
    ```markdown
    ---
@@ -114,13 +143,14 @@ Execute exactly one task, then stop.
    <working notes, oldest first, newest last>
    ```
 
-   `state_get` and `state_section` read this back by key and heading, so the
-   shape must match exactly: `---` as the literal first line, one
-   `key: value` pair per frontmatter line, then `## Heading` lines with no
-   blank line between a heading and the text that follows it. Cap Working
-   notes at 40 lines — a documented convention, not something code enforces —
-   and when notes exceed the cap, **keep the newest 40 lines and drop the
-   oldest**.
+   `<agent-loop> claude state_get <field>` and
+   `<agent-loop> claude state_section "<Heading>"` read this back by key and
+   heading, so the shape must match exactly: `---` as the literal first
+   line, one `key: value` pair per frontmatter line, then `## Heading` lines
+   with no blank line between a heading and the text that follows it. Cap
+   Working notes at 40 lines — a documented convention, not something code
+   enforces — and when notes exceed the cap, **keep the newest 40 lines and
+   drop the oldest**.
 7. **Stop.** Report in under ten lines.
 
 Write the cursor after *every* task, not at the end of the session. There is no
@@ -131,26 +161,29 @@ graceful shutdown path — usage limits, compaction, and crashes give no warning
 Loop `/next`. Halt on any of:
 
 - an open human gate
-- `plan_next_line` returns empty (plan exhausted)
+- `<agent-loop> claude plan_next_line "$plan"` returns empty (plan exhausted)
 - two consecutive gate failures on the same task
 - a decision the plan does not specify
 - `limits.max_tasks` or `limits.max_minutes` reached
 
-Before halting for any reason, run `gate_run "$(cfg_get gate_policy.halt_requires full)"`
-**once** and record the result. Narrow per-task gates mean a chain of green
-commits can still break the full suite.
+Before halting for any reason, run
+`<agent-loop> claude cfg_get gate_policy.halt_requires full` to get the
+required level, then `<agent-loop> claude gate_run "<level>"` **once** and
+record the result. Narrow per-task gates mean a chain of green commits can
+still break the full suite.
 
-Refuse to start when `detect_gate suite` is empty. Unattended commits without
-verification are not a feature.
+Refuse to start when `<agent-loop> claude detect_gate suite` is empty.
+Unattended commits without verification are not a feature.
 
-When `detect_plan` is empty, run `/plan` **and then stop** — do not roll straight
-into unattended execution of a plan the user has not seen. `/auto` executes
-approved intent; a plan written seconds ago by the same loop is not that.
+When `<agent-loop> claude detect_plan` is empty, run `/plan` **and then
+stop** — do not roll straight into unattended execution of a plan the user
+has not seen. `/auto` executes approved intent; a plan written seconds ago
+by the same loop is not that.
 
-On halt: compose `.agent/state.md` the same way as `/next` step 6 — `state_stamp`
-plus the Write tool, from the same template — then append a halt record to
-`.agent/journal.md`, then produce a `/handoff`. Report one summary, not
-per-task narration.
+On halt: compose `.agent/state.md` the same way as `/next` step 6 — run
+`<agent-loop> claude state_stamp`, then the Write tool, from the same
+template — then append a halt record to `.agent/journal.md`, then produce a
+`/handoff`. Report one summary, not per-task narration.
 
 ## /handoff [parallel]
 
@@ -170,7 +203,9 @@ by hand:
 3. Compare the two module sets. If they share a module, **refuse rather than
    guess** — name the shared module in the refusal.
 
-Only when the sets are disjoint: name a new branch
-(`$(cfg_get vcs.branch_prefix agent/)<short-name>`) and worktree path
-(`$(cfg_get vcs.worktree_root .worktrees)/<short-name>`), and state the file
-ownership boundary explicitly.
+Only when the sets are disjoint: get the branch prefix via
+`<agent-loop> claude cfg_get vcs.branch_prefix agent/` and the worktree root
+via `<agent-loop> claude cfg_get vcs.worktree_root .worktrees`, then name a
+new branch `<prefix><short-name>` and worktree path
+`<worktree_root>/<short-name>`, and state the file ownership boundary
+explicitly.

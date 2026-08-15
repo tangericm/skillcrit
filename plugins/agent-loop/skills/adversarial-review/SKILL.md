@@ -11,35 +11,58 @@ description: >
 
 # Adversarial review
 
+**Every Bash tool call is a fresh process.** An agent's shell does not carry
+state from one tool call to the next — variables, sourced functions, and
+anything else set in one command is gone by the next one. Nothing below may
+rely on a prior `source`, and nothing below may rely on a shell variable
+surviving between commands either, for the same reason.
+
+## Discover the entry point once
+
+Run this once, at the start of the review:
+
 ```bash
-AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
-  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
-. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
-adv_check_counterpart "$AGENT_ENGINE" || exit 1
+find ~/.claude/plugins ~/.codex/plugins -path '*agent-loop*' -name agent-loop -type f -perm -u+x 2>/dev/null
+```
+
+It prints one absolute path to the `agent-loop` executable. From here on,
+`` `<agent-loop>` `` in this document always means **that literal path,
+written out as text**, not a variable reference. Every command has the shape
+`<agent-loop> claude <function> [args...]` (or `<agent-loop> codex ...`
+under Codex) — `agent-loop` re-sources the whole library from scratch on
+every single call, exits non-zero exactly when the underlying function does,
+and passes stdout through unchanged.
+
+Then check the counterpart engine is available before doing anything else:
+
+```bash
+<agent-loop> claude adv_check_counterpart claude   # or: <agent-loop> codex adv_check_counterpart codex
 ```
 
 **Never proceed when `adv_check_counterpart` fails.** A single-engine review
 wearing this command's name is worse than no review, because it claims a
 confidence it did not earn.
 
-**Engine identity is always passed explicitly, never sniffed.** `AGENT_ENGINE`
-comes only from the `erict_env claude` / `erict_env codex` call above, and
-both `adv_check_counterpart` and `adv_counterpart_cmd` take it as an
-argument. An engine that inferred its own identity from the environment
-could end up reviewing its own work by accident; passing it explicitly
-guarantees the counterpart is always the other engine.
+**Engine identity is always passed explicitly, never sniffed.** It comes
+only from the `claude`/`codex` word you write into every `<agent-loop>`
+command above — both as the wrapper's own first argument and, for
+`adv_check_counterpart` and `adv_counterpart_cmd`, as the function's first
+argument too. An engine that inferred its own identity from the environment
+could end up reviewing its own work by accident; writing it explicitly into
+every command guarantees the counterpart is always the other engine.
 
 ## 1. Assemble the brief
 
-- Target diff: `git diff "$(git merge-base HEAD "$(vcs_default_branch)")"...HEAD`
-- Criteria: the exit gate or acceptance section of `$(state_get plan)`, or the
-  whole plan when it declares none.
-- Rules: `$(cfg_get review.rules '.agent/rules.md')`, falling back to
-  `AGENTS.md`, then `CLAUDE.md`.
-- Schema: `$AGENT_LOOP_LIB/../schema/findings.schema.json` — interpolate this
-  absolute path into the brief text. A bare relative path does not resolve
-  once the reviewer's working directory is the target repo, not the plugin.
+- Target diff: get the default branch with `<agent-loop> claude vcs_default_branch`,
+  then `git diff "$(git merge-base HEAD "<default branch>")"...HEAD`.
+- Criteria: the exit gate or acceptance section of the plan at
+  `<agent-loop> claude state_get plan`, or the whole plan when it declares none.
+- Rules: the file at `<agent-loop> claude cfg_get review.rules '.agent/rules.md'`,
+  falling back to `AGENTS.md`, then `CLAUDE.md`.
+- Schema: `<the directory containing the discovered agent-loop path>/../schema/findings.schema.json`
+  — interpolate this absolute path into the brief text. A bare relative path
+  does not resolve once the reviewer's working directory is the target repo,
+  not the plugin.
 
 Write the brief to a temp file. Both legs receive the same brief.
 
@@ -56,9 +79,11 @@ following criteria — find why it does not."
     host agent performs the refutation itself, following
     `agents/refuter.md`'s instructions inline against the same brief, and
     produces the same output contract.
-- **The counterpart leg** — run `adv_counterpart_cmd "$AGENT_ENGINE" <prompt> <out>`
-  with the exit-gate-skeptic lens: does this satisfy the criteria, or merely
-  satisfy the tests?
+- **The counterpart leg** — run
+  `<agent-loop> claude adv_counterpart_cmd claude <prompt> <out>` (substituting
+  your own engine, `claude` or `codex`, in both places) with the exit-gate-skeptic
+  lens: does this satisfy the criteria, or merely satisfy the tests? This
+  echoes a shell command; run the command it echoes as a separate step.
 
 Both legs are read-only, but not enforced identically. The Codex counterpart
 is sandboxed read-only by `-s read-only`. The Claude-side legs — the local
@@ -71,7 +96,7 @@ tree regardless of engine.
 ## 3. Reconcile
 
 ```bash
-adv_reconcile "$this_engine_out" "$counterpart_out"
+<agent-loop> claude adv_reconcile "$this_engine_out" "$counterpart_out"
 ```
 
 Report in exactly these buckets:
