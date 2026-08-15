@@ -15,4 +15,5 @@ erict_env() {
   . "$here/plan.sh"
   . "$here/gate.sh"
   . "$here/vcs.sh"
+  . "$here/adversarial.sh"
 }
