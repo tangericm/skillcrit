@@ -1,5 +1,6 @@
 #!/bin/bash
 . "$ERICT_LIB/config.sh"
+. "$ERICT_LIB/portable.sh"
 . "$ERICT_LIB/plan.sh"
 
 _fixture_plan() {
@@ -67,4 +68,29 @@ test_plan_bootstrap_refuses_to_clobber() {
   printf -- '- [ ] real work\n' > "$AGENT_REPO/PLAN.md"
   assert_fails "refuses to overwrite" plan_bootstrap "$AGENT_REPO/PLAN.md" "whatever"
   assert_contains "$(cat "$AGENT_REPO/PLAN.md")" "real work" "original untouched"
+}
+
+_fixture_plan_crlf() {
+  AGENT_REPO="$(mktemp_repo)"
+  printf -- '# Plan\r\n\r\n- [x] **Step 1: done already**\r\n- [ ] **Step 2: write the test**\r\n- [ ] **Step 3: make it pass**\r\n' \
+    > "$AGENT_REPO/PLAN.md"
+  printf '%s' "$AGENT_REPO/PLAN.md"
+}
+
+test_plan_next_text_strips_trailing_cr_on_a_crlf_plan() {
+  local p out; p="$(_fixture_plan_crlf)"
+  out="$(plan_next_text "$p")"
+  assert_eq "**Step 2: write the test**" "$out" "text without marker or trailing carriage return"
+  assert_eq "0" "$(printf '%s' "$out" | grep -c $'\r')" "no carriage return survives into the returned text"
+}
+
+test_plan_next_line_and_counts_are_unaffected_by_crlf() {
+  # plan_next_line and plan_counts use unanchored regexes ("- \[ \]" with no
+  # $ at the end), so a trailing \r never changes matching or counting. This
+  # pins that as a tested fact rather than an assumption, so stripping is
+  # deliberately NOT added to plan_next_line, plan_counts, or
+  # _detect_has_open_task for symmetry's sake.
+  local p; p="$(_fixture_plan_crlf)"
+  assert_eq "4" "$(plan_next_line "$p")" "line number unaffected by a trailing \\r"
+  assert_eq "1 3" "$(plan_counts "$p")" "counts unaffected by a trailing \\r"
 }

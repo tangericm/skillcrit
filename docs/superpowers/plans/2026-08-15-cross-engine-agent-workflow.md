@@ -2614,6 +2614,10 @@ git commit -m "docs: point AGENTS.md at the agent loop configuration"
 - Modify: `plugins/erict-skills/lib/state.sh` (hostname in the lock)
 - Modify: `plugins/erict-skills/lib/env.sh` (source `portable.sh` first, run the dependency check)
 - Modify: `plugins/erict-skills/skills/session-state/SKILL.md` (drop the machine-specific discovery path)
+- Modify: `plugins/erict-skills/lib/plan.sh` (wire `portable_strip_cr` into `plan_next_text` —
+  this is `portable_strip_cr`'s one production call site; without it the helper
+  is defined and unit-tested but never actually used)
+- Modify: `tests/plan_test.sh` (source `portable.sh`; add CRLF regression tests)
 
 **Interfaces:**
 - Consumes: everything from Tasks 1–9
@@ -2842,6 +2846,39 @@ and `~/.codex/plugins`. A developer working from a local checkout can export
 `ERICT_LIB` themselves; a machine-specific path does not belong in a
 distributable pack.
 
+`portable_strip_cr` needs a caller, or the CRLF capability this task claims
+does not exist. `plan_next_text` is the one reader whose output escapes into
+another file: the session-state skill records it verbatim into
+`.agent/state.md`'s `next_step` field, so a trailing `\r` from a
+CRLF-checked-out plan would ride straight into the cursor file. In
+`plugins/erict-skills/lib/plan.sh`, read the plan through `portable_strip_cr`
+before extracting the line:
+
+```bash
+plan_next_text() {
+  local plan="$1" line
+  line="$(plan_next_line "$plan")"
+  [ -n "$line" ] || return 0
+  portable_strip_cr "$plan" | awk -v ln="$line" 'NR == ln {
+    sub(/^[[:space:]]*- \[ \][[:space:]]*/, "")
+    print
+    exit
+  }'
+}
+```
+
+This creates an ordering dependency: `plan.sh` now needs `portable.sh` sourced
+first. `env.sh` already sources `portable.sh` before everything else, so this
+holds at runtime; `tests/plan_test.sh` needs `. "$ERICT_LIB/portable.sh"`
+added alongside its existing `config.sh`/`plan.sh` sourcing for the same
+reason.
+
+Leave `plan_next_line`, `plan_counts`, and `_detect_has_open_task` alone —
+their regexes are unanchored at end-of-line, so a trailing `\r` never affects
+matching or counting. Add a test proving that claim rather than assuming it,
+using a CRLF fixture written with an explicit
+`printf -- '...\r\n...\r\n'` (not dependent on git's checkout behavior).
+
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `bash tests/run.sh`
@@ -2852,7 +2889,9 @@ Expected: PASS — tally grows, `0 failed`
 ```bash
 git add plugins/erict-skills/lib/portable.sh plugins/erict-skills/lib/detect.sh \
   plugins/erict-skills/lib/state.sh plugins/erict-skills/lib/env.sh \
-  plugins/erict-skills/skills/session-state/SKILL.md .gitattributes tests/portable_test.sh
+  plugins/erict-skills/lib/plan.sh \
+  plugins/erict-skills/skills/session-state/SKILL.md .gitattributes \
+  tests/portable_test.sh tests/plan_test.sh
 git commit -m "feat: make the pack portable across macOS, Linux, Git Bash, and synced folders"
 ```
 

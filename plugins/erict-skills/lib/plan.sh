@@ -11,11 +11,11 @@ plan_next_text() {
   local plan="$1" line
   line="$(plan_next_line "$plan")"
   [ -n "$line" ] || return 0
-  awk -v ln="$line" 'NR == ln {
+  portable_strip_cr "$plan" | awk -v ln="$line" 'NR == ln {
     sub(/^[[:space:]]*- \[ \][[:space:]]*/, "")
     print
     exit
-  }' "$plan"
+  }'
 }
 
 plan_counts() {
