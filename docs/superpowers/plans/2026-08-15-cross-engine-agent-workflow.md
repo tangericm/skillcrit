@@ -1423,7 +1423,7 @@ EOF
   while IFS= read -r b; do
     [ -n "$b" ] || continue
     b_mod="$(slice_module "$b")"
-    if printf '%s\n' "$a_mods" | grep -Fxq "$b_mod"; then
+    if printf '%s\n' "$a_mods" | grep -Fxq -- "$b_mod"; then
       printf 'slices are not disjoint: both touch %s\n' "$b_mod" >&2
       return 1
     fi

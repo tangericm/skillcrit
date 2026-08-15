@@ -66,3 +66,32 @@ test_slice_disjoint_reads_multi_file_lists() {
 src/b/y.ts' 'src/c/z.ts
 src/b/w.ts'
 }
+
+test_slice_disjoint_rejects_shared_dash_prefixed_module() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  cat > "$AGENT_REPO/.agent/config.json" <<'EOF'
+{
+  "modules": {
+    "-legacy": "legacy/*"
+  }
+}
+EOF
+  assert_fails "shared dash-prefixed module rejected" \
+    slice_disjoint "legacy/a.gd" "legacy/b.gd"
+}
+
+test_slice_disjoint_accepts_different_dash_prefixed_modules() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  cat > "$AGENT_REPO/.agent/config.json" <<'EOF'
+{
+  "modules": {
+    "-legacy": "legacy/*",
+    "-modern": "modern/*"
+  }
+}
+EOF
+  slice_disjoint "legacy/a.gd" "modern/b.gd"
+  assert_eq "0" "$?" "different dash-prefixed modules are disjoint"
+}
