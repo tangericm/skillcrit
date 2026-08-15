@@ -128,8 +128,14 @@ adv_counterpart_cmd() {
         "$ADV_CODEX_BIN" "${AGENT_REPO:-.}" "$schema" "$out_file" "$prompt_file"
       ;;
     claude)
-      printf '%s -p --output-format json < %q > %q' \
-        "$ADV_CLAUDE_BIN" "$prompt_file" "$out_file"
+      # `--output-format json` is a single-result envelope
+      # ({"type":"result",...,"result":"<final message text>",...}), not a
+      # bare findings array -- adv_reconcile's --slurpfile expects the
+      # latter and dies with "finding missing a required field" otherwise.
+      # The findings array the prompt asked for is text inside .result;
+      # extract it before it ever reaches the out file.
+      printf '%s -p --output-format json < %q | jq -r %q > %q' \
+        "$ADV_CLAUDE_BIN" "$prompt_file" '.result' "$out_file"
       ;;
     *)
       return 1

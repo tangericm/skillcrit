@@ -110,9 +110,13 @@ Read-only. Never writes, never commits.
    if it prints a non-empty glob, grep those files for the marker from
    `<agent-loop> claude cfg_get human_gate.marker ''`.
 4. Report position, next step, blockers, branch, and gate status in under ten
-   lines. If the cursor's `task` disagrees with
-   `<agent-loop> claude plan_next_line "<plan path>"`, say so — the plan was
-   edited by hand and the cursor is stale.
+   lines. Compare the cursor's `task` (an ordinal: how many tasks are done,
+   plus one) against `plan_counts`'s **first field plus one** — not against
+   `plan_next_line`, which reports a raw file line number, a different unit
+   entirely; comparing an ordinal to a line number reports "stale" on nearly
+   every run even when nothing is wrong. If they disagree, say so — the plan
+   was edited by hand (tasks checked or added outside `/next`) and the
+   cursor is stale.
 
 ## /next
 
@@ -127,23 +131,30 @@ Execute exactly one task, then stop.
    just printed if no state file exists yet — and hold it as `<plan path>`
    for the rest of this task. Then run
    `<agent-loop> claude plan_next_line "<plan path>"` and hold onto that line
-   number — step 6 must edit that exact line.
+   number — step 5 must edit that exact line.
 2. **Read** only the current task's section of the plan.
 3. **Implement** following the project's testing discipline from the rules file.
 4. **Gate.** `<agent-loop> claude gate_level_for <changed files>` to get the
    level, then `<agent-loop> claude gate_run "<level>"`.
-5. **Commit** on green with `<agent-loop> claude vcs_commit "<message>"`.
-6. **Record.** Edit the plan file directly: change the current task's
-   `- [ ]` to `- [x]`, on the exact line `plan_next_line "<plan path>"` gave
-   you in step 1. Match that line precisely and leave the surrounding text alone —
-   this is a hand edit, not a search-and-replace across the file. Write the
-   project's task report if it defines one.
-
-   Then run `<agent-loop> claude state_stamp` and use the Write tool to
-   compose `.agent/state.md` yourself, substituting the five stamped lines
-   verbatim and filling `plan`, `task`, and `total_tasks` from what you
-   already hold (the active plan path from `detect_plan`, the task you just
-   completed plus one, and `plan_counts`'s second field):
+5. **Record the task**, on green. Edit the plan file directly: change the
+   current task's `- [ ]` to `- [x]`, on the exact line
+   `plan_next_line "<plan path>"` gave you in step 1. Match that line
+   precisely and leave the surrounding text alone — this is a hand edit, not
+   a search-and-replace across the file. Write the project's task report if
+   it defines one. Do this **before** staging — `vcs_commit` never runs
+   `git add`, so whatever is staged when you commit is exactly what lands.
+   Committing first and ticking the box afterward means the tick never
+   makes it into that commit at all.
+6. **Stage explicitly.** `git add` exactly the files this task touched: the
+   files changed in step 3, the plan file just edited in step 5, and the
+   task report file if you wrote one. Never `git add -a`/`-A` — that stages
+   whatever other in-progress work happens to be sitting in the tree too.
+7. **Commit** with `<agent-loop> claude vcs_commit "<message>"`.
+8. **Write the cursor.** Run `<agent-loop> claude state_stamp` and use the
+   Write tool to compose `.agent/state.md` yourself, substituting the five
+   stamped lines verbatim and filling `plan`, `task`, and `total_tasks` from
+   what you already hold (the active plan path from `detect_plan`, the task
+   you just completed plus one, and `plan_counts`'s second field):
 
    ```markdown
    ---
@@ -175,7 +186,7 @@ Execute exactly one task, then stop.
    Working notes at 40 lines — a documented convention, not something code
    enforces — and when notes exceed the cap, **keep the newest 40 lines and
    drop the oldest**.
-7. **Stop.** Report in under ten lines.
+9. **Stop.** Report in under ten lines.
 
 Write the cursor after *every* task, not at the end of the session. There is no
 graceful shutdown path — usage limits, compaction, and crashes give no warning.
@@ -207,7 +218,7 @@ stop** — do not roll straight into unattended execution of a plan the user
 has not seen. `/auto` executes approved intent; a plan written seconds ago
 by the same loop is not that.
 
-On halt: compose `.agent/state.md` the same way as `/next` step 6 — run
+On halt: compose `.agent/state.md` the same way as `/next` step 8 — run
 `<agent-loop> claude state_stamp`, then the Write tool, from the same
 template — then append a halt record to `.agent/journal.md`, then produce a
 `/handoff`. Report one summary, not per-task narration.

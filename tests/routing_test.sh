@@ -34,6 +34,36 @@ test_counterpart_cmd_from_codex_uses_claude_print() {
   cmd="$(adv_counterpart_cmd codex /tmp/p.txt /tmp/o.json)"
   assert_contains "$cmd" "claude -p" "invokes claude headless"
   assert_contains "$cmd" "--output-format json" "structured verdict"
+  assert_contains "$cmd" "jq -r" "extracts the result field from the single-result envelope"
+  assert_contains "$cmd" ".result" "extracts specifically .result, not the whole envelope"
+}
+
+test_counterpart_cmd_claude_extracts_result_from_envelope() {
+  # Fix 3: `claude -p --output-format json` returns a single-result
+  # envelope object, not a bare findings array -- adv_reconcile's
+  # --slurpfile expects the latter and dies with "finding missing a
+  # required field" otherwise. Prove the echoed command actually turns a
+  # fixture envelope into a bare array, without invoking a real claude
+  # binary: ADV_CLAUDE_BIN points at a fake executable that just cats a
+  # fixture envelope, standing in for claude's stdout.
+  local fake_dir fake_bin envelope prompt_file out cmd
+  fake_dir="$(mktemp -d)"
+  fake_bin="$fake_dir/claude"
+  envelope="$(mktemp)"
+  prompt_file="$(mktemp)"
+  out="$(mktemp)"
+  printf '%s' '{"type":"result","subtype":"success","is_error":false,"result":"[{\"file\":\"x.gd\",\"line\":10,\"category\":\"correctness\",\"claim\":\"leaks\",\"evidence\":\"e\",\"severity\":\"high\",\"refuted\":false}]","session_id":"abc"}' \
+    > "$envelope"
+  {
+    printf '#!/bin/bash\n'
+    printf 'cat %q\n' "$envelope"
+  } > "$fake_bin"
+  chmod +x "$fake_bin"
+  ADV_CLAUDE_BIN="$fake_bin"
+  cmd="$(adv_counterpart_cmd codex "$prompt_file" "$out")"
+  eval "$cmd"
+  assert_eq "array" "$(jq -r 'type' "$out" 2>/dev/null)" "out file is a bare findings array, not an envelope"
+  assert_eq "leaks" "$(jq -r '.[0].claim' "$out" 2>/dev/null)" "finding content survives envelope extraction"
 }
 
 test_check_counterpart_fails_loudly_when_absent() {
