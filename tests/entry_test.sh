@@ -69,6 +69,30 @@ test_sourcing_env_sh_directly_under_zsh_now_succeeds() {
   assert_contains "$out" "$repo" "AGENT_REPO resolved under zsh"
 }
 
+test_adv_counterpart_cmd_resolves_an_absolute_schema_path_under_zsh() {
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf '  SKIP: zsh not available on this machine\n' >&2
+    return 0
+  fi
+  local repo out schema
+  repo="$(mktemp_repo)"
+  # adversarial.sh has its own independent BASH_SOURCE[0] resolution for the
+  # findings schema path, separate from env.sh's. Sourcing env.sh directly
+  # under zsh (proven supported above) makes adv_counterpart_cmd a live zsh
+  # function reachable without ever touching bin/agent-loop, so it must be
+  # just as caller-shell-agnostic as erict_env is. cd to a directory with no
+  # relation to the plugin before calling it, so a wrong relative-path
+  # resolution can't accidentally land on a real file.
+  out="$(cd "$repo" && zsh -c ". '$AGENT_LOOP_LIB/env.sh' && erict_env claude && cd /tmp && adv_counterpart_cmd claude /tmp/prompt.txt /tmp/out.txt" 2>&1)"
+  schema="$(printf '%s' "$out" | awk '{ for (i = 1; i <= NF; i++) if ($i == "--output-schema") print $(i + 1) }')"
+  case "$schema" in
+    /*) assert_eq "0" "0" "schema path is absolute" ;;
+    *)  assert_eq "absolute path" "$schema" "schema path is absolute" ;;
+  esac
+  assert_eq "1" "$([ -n "$schema" ] && [ -f "$schema" ] && printf 1 || printf 0)" \
+    "schema path points at a file that actually exists"
+}
+
 test_wrapper_rejects_an_unknown_engine() {
   local plan
   plan="$(_entry_fixture_plan)"

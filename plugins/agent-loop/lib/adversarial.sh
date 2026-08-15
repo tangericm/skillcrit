@@ -1,6 +1,22 @@
 #!/bin/bash
 # Cross-engine refutation review. Never averages verdicts into a consensus.
 
+# Same top-level capture as env.sh, and for the same reason: ${BASH_SOURCE[0]}
+# is empty under zsh, and inside a zsh *function* $0 is reset to the
+# function's own name (FUNCTION_ARGZERO, on by default) rather than the file
+# that defined it — so neither can be read correctly from inside a function.
+# This line runs once, at source time, before any function here has a chance
+# to run, which is the one point where bash's BASH_SOURCE[0] and zsh's $0
+# both still correctly hold this file's own path. erict_env sources this
+# file unconditionally, including when a caller sources env.sh directly
+# under zsh (a supported path — see tests/entry_test.sh) without ever
+# touching bin/agent-loop, so adv_counterpart_cmd cannot assume its caller
+# is bash. Captured locally, rather than reused from env.sh's
+# _erict_env_lib_dir, so this file stays independently sourceable — several
+# tests (tests/routing_test.sh, tests/reconcile_test.sh) source it directly
+# without env.sh.
+_adversarial_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
 adv_key() {
   printf '%s' "$1" | jq -r '"\(.file):\(.line):\(.category)"'
 }
@@ -71,15 +87,14 @@ adv_check_counterpart() {
 }
 
 adv_counterpart_cmd() {
-  local self="$1" prompt_file="$2" out_file="$3" schema other
-  # BASH_SOURCE[0] is reliable here because this function is only ever
-  # reached through bin/agent-loop (see erict_env in env.sh), and that entry
-  # point always execs bash — never zsh — so bash's stack-based BASH_SOURCE
-  # resolves correctly from inside a function regardless of caller shell.
-  # (Contrast env.sh's erict_env, which a caller may also reach by sourcing
-  # env.sh directly under zsh; that path needs the top-level $0 capture — see
-  # env.sh's comment.)
-  schema="$(cd "$(dirname "${BASH_SOURCE[0]}")/../schema" && pwd)/findings.schema.json"
+  local self="$1" prompt_file="$2" out_file="$3" schema_dir schema other
+  schema_dir="$(cd "$_adversarial_lib_dir/../schema" 2>/dev/null && pwd)"
+  if [ -z "$schema_dir" ]; then
+    printf 'adv_counterpart_cmd: cannot resolve the schema directory from %s/../schema\n' \
+      "$_adversarial_lib_dir" >&2
+    return 1
+  fi
+  schema="$schema_dir/findings.schema.json"
   other="$(adv_counterpart "$self")" || return 1
   case "$other" in
     codex)
