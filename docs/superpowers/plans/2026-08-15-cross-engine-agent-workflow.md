@@ -2600,6 +2600,409 @@ git commit -m "docs: point AGENTS.md at the agent loop configuration"
 
 ---
 
+### Task 16: Cross-platform portability and environment preflight
+
+> **Execution order:** run this immediately after Task 9 and before Task 10. It
+> changes `lib/*.sh` that Tasks 11 and 12 build on. Numbered 16 only to avoid
+> renumbering briefs already generated for Tasks 10–15.
+
+**Files:**
+- Create: `plugins/erict-skills/lib/portable.sh`
+- Create: `.gitattributes`
+- Create: `tests/portable_test.sh`
+- Modify: `plugins/erict-skills/lib/detect.sh` (replace both `stat -f %m` calls)
+- Modify: `plugins/erict-skills/lib/state.sh` (hostname in the lock)
+- Modify: `plugins/erict-skills/lib/env.sh` (source `portable.sh` first, run the dependency check)
+- Modify: `plugins/erict-skills/skills/session-state/SKILL.md` (drop the machine-specific discovery path)
+
+**Interfaces:**
+- Consumes: everything from Tasks 1–9
+- Produces:
+  - `portable_mtime <file>` — echoes the file's modification time as a Unix
+    epoch integer on GNU, BSD, and Git Bash. Returns 1 and prints to stderr when
+    no supported `stat` exists, rather than echoing a silent `0`.
+  - `portable_require` — verifies `jq`, `git`, and `awk` are on `PATH`. Returns 1
+    naming every missing tool. **Must not use `jq`**, since `jq` is one of the
+    tools it checks.
+  - `portable_host` — echoes a stable machine identifier.
+  - `portable_strip_cr <file>` — echoes the file's contents with trailing
+    carriage returns removed, for CRLF-checked-out plans.
+
+**Scope note:** "Windows" here means Git Bash or WSL, not PowerShell or `cmd`.
+The pack is bash; that is the honest boundary and the README must say so.
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/portable_test.sh`:
+
+```bash
+#!/bin/bash
+. "$ERICT_LIB/portable.sh"
+
+test_portable_mtime_returns_an_epoch_integer() {
+  local repo f now
+  repo="$(mktemp_repo)"
+  f="$repo/README.md"
+  now="$(portable_mtime "$f")"
+  assert_eq "1" "$(printf '%s' "$now" | grep -cE '^[0-9]+$')" "mtime is an integer"
+  assert_eq "1" "$([ "$now" -gt 1000000000 ] && printf 1 || printf 0)" "mtime is a plausible epoch"
+}
+
+test_portable_mtime_orders_two_files() {
+  local repo older newer
+  repo="$(mktemp_repo)"
+  older="$repo/older.md"
+  newer="$repo/newer.md"
+  printf 'a\n' > "$older"
+  sleep 1
+  printf 'b\n' > "$newer"
+  assert_eq "1" "$([ "$(portable_mtime "$newer")" -gt "$(portable_mtime "$older")" ] && printf 1 || printf 0)" \
+    "newer file has a greater mtime"
+}
+
+test_portable_mtime_fails_loudly_on_a_missing_file() {
+  assert_fails "missing file is an error" portable_mtime /nonexistent/path/xyz
+}
+
+test_portable_require_passes_when_tools_present() {
+  portable_require
+  assert_eq "0" "$?" "jq, git and awk are present in this environment"
+}
+
+test_portable_require_names_a_missing_tool() {
+  local out
+  out="$(PATH=/nonexistent portable_require 2>&1 || true)"
+  assert_contains "$out" "jq" "names jq when PATH is empty"
+}
+
+test_portable_host_is_non_empty_and_stable() {
+  local a b
+  a="$(portable_host)"
+  b="$(portable_host)"
+  assert_eq "$a" "$b" "hostname is stable across calls"
+  assert_eq "0" "$([ -z "$a" ] && printf 0 || printf 1)" "hostname is non-empty" 2>/dev/null
+  assert_eq "1" "$([ -n "$a" ] && printf 1 || printf 0)" "hostname is non-empty"
+}
+
+test_portable_strip_cr_removes_carriage_returns() {
+  local repo f
+  repo="$(mktemp_repo)"
+  f="$repo/crlf.md"
+  printf -- '- [ ] first\r\n- [ ] second\r\n' > "$f"
+  assert_eq "0" "$(portable_strip_cr "$f" | grep -c $'\r')" "no carriage returns remain"
+  assert_eq "2" "$(portable_strip_cr "$f" | grep -c 'first\|second')" "content survives"
+}
+
+test_state_lock_ignores_a_pid_from_another_host() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  state_write "p.md" 1 2 "b" "c" "s" "none" ""
+  awk -v pid="$$" '{
+    sub(/^engine: claude$/, "engine: codex")
+    sub(/^pid: .*$/, "pid: " pid)
+    sub(/^host: .*$/, "host: some-other-machine")
+    print
+  }' "$(state_path)" > "$(state_path).tmp" && mv "$(state_path).tmp" "$(state_path)"
+  assert_fails "a live pid on another host is not proof of liveness" state_lock_ok
+}
+
+test_state_records_this_host() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  state_write "p.md" 1 2 "b" "c" "s" "none" ""
+  assert_eq "$(portable_host)" "$(state_get host)" "host round-trips"
+}
+
+test_detect_plan_still_picks_the_newest() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/docs/plans"
+  printf -- '- [ ] old\n' > "$AGENT_REPO/docs/plans/a.md"
+  sleep 1
+  printf -- '- [ ] new\n' > "$AGENT_REPO/docs/plans/b.md"
+  assert_eq "$AGENT_REPO/docs/plans/b.md" "$(detect_plan)" "newest plan still wins after the mtime change"
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `bash tests/run.sh`
+Expected: FAIL — `portable.sh: No such file or directory`
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plugins/erict-skills/lib/portable.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Cross-platform helpers. Targets GNU (Linux, Git Bash), BSD (macOS), and WSL.
+# Every helper fails loudly rather than returning a plausible wrong answer.
+
+portable_mtime() {
+  local file="$1" out
+  if [ ! -e "$file" ]; then
+    printf 'portable_mtime: no such file: %s\n' "$file" >&2
+    return 1
+  fi
+  out="$(stat -c %Y "$file" 2>/dev/null)" && { printf '%s' "$out"; return 0; }
+  out="$(stat -f %m "$file" 2>/dev/null)" && { printf '%s' "$out"; return 0; }
+  printf 'portable_mtime: neither GNU nor BSD stat is available\n' >&2
+  return 1
+}
+
+portable_require() {
+  local tool missing
+  missing=""
+  for tool in jq git awk; do
+    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+  done
+  if [ -n "$missing" ]; then
+    printf 'erict-skills requires these tools on PATH, and they are missing:%s\n' "$missing" >&2
+    printf 'On macOS: brew install jq. On Debian/Ubuntu: apt-get install jq.\n' >&2
+    printf 'On Windows use Git Bash or WSL; PowerShell and cmd are not supported.\n' >&2
+    return 1
+  fi
+  return 0
+}
+
+portable_host() {
+  local h
+  h="${HOSTNAME:-}"
+  [ -n "$h" ] || h="$(hostname 2>/dev/null)"
+  [ -n "$h" ] || h="$(uname -n 2>/dev/null)"
+  [ -n "$h" ] || h="unknown-host"
+  printf '%s' "$h"
+}
+
+portable_strip_cr() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  awk '{ sub(/\r$/, ""); print }' "$file"
+}
+```
+
+`.gitattributes` at the repository root — without this, a Windows checkout with
+`core.autocrlf=true` gives every `.sh` file carriage returns and bash dies with
+`$'\r': command not found`:
+
+```gitattributes
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+```
+
+In `plugins/erict-skills/lib/detect.sh`, replace both occurrences of
+
+```bash
+mtime="$(stat -f %m "$f" 2>/dev/null || echo 0)"
+```
+
+with
+
+```bash
+mtime="$(portable_mtime "$f" 2>/dev/null)" || mtime=0
+```
+
+(the first occurrence uses `"$repo/$f"`; keep its path expression unchanged).
+
+In `plugins/erict-skills/lib/state.sh`, add `host` to the frontmatter written by
+`state_write`, immediately after the `engine` line:
+
+```bash
+    printf 'host: %s\n' "$(portable_host)"
+```
+
+and gate the liveness check in `state_lock_ok` on the host matching, since a pid
+from another machine proves nothing:
+
+```bash
+  holder_host="$(state_get host)"
+  if [ -n "$holder_host" ] && [ "$holder_host" != "$(portable_host)" ]; then
+    printf 'refusing: %s holds %s from host %s; liveness cannot be checked across machines\n' \
+      "$holder" "$file" "$holder_host" >&2
+    return 1
+  fi
+```
+
+Place that block after the same-engine early return and before the `kill -0`
+check, so a different engine holding the file from another host refuses rather
+than testing a meaningless local pid. This is what makes the lock correct on a
+cloud-synced worktree.
+
+In `plugins/erict-skills/lib/env.sh`, source `portable.sh` **first** and run the
+dependency check before anything else can call `cfg_get`:
+
+```bash
+  . "$here/portable.sh"
+  portable_require || return 1
+```
+
+In `plugins/erict-skills/skills/session-state/SKILL.md`, drop
+`~/Developer/erict-skills` from the discovery `find`, leaving `~/.claude/plugins`
+and `~/.codex/plugins`. A developer working from a local checkout can export
+`ERICT_LIB` themselves; a machine-specific path does not belong in a
+distributable pack.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `bash tests/run.sh`
+Expected: PASS — tally grows, `0 failed`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add plugins/erict-skills/lib/portable.sh plugins/erict-skills/lib/detect.sh \
+  plugins/erict-skills/lib/state.sh plugins/erict-skills/lib/env.sh \
+  plugins/erict-skills/skills/session-state/SKILL.md .gitattributes tests/portable_test.sh
+git commit -m "feat: make the pack portable across macOS, Linux, Git Bash, and synced folders"
+```
+
+---
+
+### Task 17: Rebalance to a thin core
+
+> **Execution order:** run after Task 16 and before Task 10.
+
+**Why:** the pack reached 484 lines of shell against 155 of prose, and every
+Critical and Important code defect in this build came from that shell. Three
+modules earn their weight — `gate.sh` (picks the narrowest proving gate, saving
+real minutes on an expensive suite), `vcs.sh` (encodes the detached-HEAD and
+non-standard-default-branch cases a model infers wrong), and the read-only plan
+helpers (three greps instead of loading a 2,700-line plan into context each
+`/status`). The rest is cheaper and safer as prose.
+
+**Files:**
+- Delete: `plugins/erict-skills/lib/slice.sh`, `tests/slice_test.sh`
+- Modify: `plugins/erict-skills/lib/plan.sh` (remove `plan_tick`)
+- Modify: `plugins/erict-skills/lib/state.sh` (replace `state_write` with `state_stamp`)
+- Modify: `plugins/erict-skills/lib/env.sh` (stop sourcing `slice.sh`)
+- Modify: `plugins/erict-skills/skills/session-state/SKILL.md` (prose replaces the removed calls)
+- Modify: `tests/plan_test.sh`, `tests/state_test.sh`, `tests/env_test.sh`, `tests/portable_test.sh`
+
+**Interfaces:**
+- Removed: `plan_tick`, `state_write`, `slice_module`, `slice_disjoint`
+- Retained unchanged: `cfg_get`, `cfg_file`, `detect_plan`, `detect_gate`,
+  `state_path`, `state_get`, `state_section`, `state_lock_ok`, `plan_next_line`,
+  `plan_next_text`, `plan_counts`, `plan_bootstrap`, `gate_rank`,
+  `gate_level_for`, `gate_run`, all `vcs_*`, all `portable_*`
+- Produces: `state_stamp` — echoes the machine-derived frontmatter fields as
+  `key: value` lines (`branch`, `last_green`, `engine`, `pid`, `host`,
+  `updated`). It writes no file. The model composes `.agent/state.md` itself,
+  substituting these lines into the template in `SKILL.md`.
+
+`state_stamp` exists because those six values are machine facts a model cannot
+read off, while the plan pointer and the three prose sections are things a model
+already holds. Splitting on that line removes the 8-positional-argument trap that
+produced this build's Task 9 defect, without asking the model to guess a pid.
+
+- [ ] **Step 1: Write the failing test**
+
+Replace `test_state_round_trip` and the capping tests in `tests/state_test.sh`
+with tests against the new surface, and add to `tests/plan_test.sh`:
+
+```bash
+test_state_stamp_emits_machine_fields() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  local out
+  out="$(cd "$AGENT_REPO" && state_stamp)"
+  assert_contains "$out" "branch: main" "branch present"
+  assert_contains "$out" "engine: claude" "engine present"
+  assert_contains "$out" "host: $(portable_host)" "host present"
+  assert_eq "1" "$(printf '%s\n' "$out" | grep -cE '^pid: [0-9]+$')" "pid is numeric"
+  assert_eq "1" "$(printf '%s\n' "$out" | grep -cE '^updated: [0-9]{4}-')" "updated is a timestamp"
+}
+
+test_state_stamp_writes_no_file() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  ( cd "$AGENT_REPO" && state_stamp ) >/dev/null
+  assert_eq "0" "$([ -f "$(state_path)" ] && printf 1 || printf 0)" "state_stamp does not write"
+}
+
+test_state_get_still_reads_a_model_written_file() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  mkdir -p "$AGENT_REPO/.agent"
+  printf -- '---\nplan: docs/p.md\ntask: 4\nhost: %s\nengine: claude\npid: %s\n---\n\n## Next concrete step\nDo the thing\n' \
+    "$(portable_host)" "$$" > "$(state_path)"
+  assert_eq "docs/p.md" "$(state_get plan)" "reads a hand-written cursor"
+  assert_eq "Do the thing" "$(state_section 'Next concrete step')" "reads a hand-written section"
+  state_lock_ok
+  assert_eq "0" "$?" "same engine and host is unlocked"
+}
+
+test_plan_tick_is_gone() {
+  assert_eq "" "$(type -t plan_tick)" "plan_tick removed"
+}
+
+test_slice_functions_are_gone() {
+  assert_eq "" "$(type -t slice_disjoint)" "slice_disjoint removed"
+  assert_eq "" "$(type -t slice_module)" "slice_module removed"
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `bash tests/run.sh`
+Expected: FAIL — `state_stamp: command not found`, and the `_gone` tests fail
+because the functions still exist.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Replace `state_write` in `plugins/erict-skills/lib/state.sh` with:
+
+```bash
+state_stamp() {
+  printf 'branch: %s\n' "$(vcs_current_branch)"
+  printf 'last_green: %s\n' "$(git -C "${AGENT_REPO:-.}" rev-parse --short HEAD 2>/dev/null)"
+  printf 'engine: %s\n' "${AGENT_ENGINE:-unknown}"
+  printf 'pid: %s\n' "$$"
+  printf 'host: %s\n' "$(portable_host)"
+  printf 'updated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+```
+
+Delete `plan_tick` from `plan.sh`, delete `lib/slice.sh` and `tests/slice_test.sh`,
+and remove the `slice.sh` source line from `env.sh`.
+
+Keep `STATE_NOTES_MAX` as a documented convention in `SKILL.md` rather than code:
+the model caps its own notes at 40 lines when composing the file.
+
+- [ ] **Step 4: Rewrite the affected `SKILL.md` procedures**
+
+In `/next` step 6, replace the `state_write` invocation with: run `state_stamp`,
+then use the Write tool to compose `.agent/state.md` from this template,
+substituting the stamped lines verbatim and filling `plan`, `task`, and
+`total_tasks` yourself. Show the full template, including the three body
+sections, and state the 40-line notes cap and that the newest lines are kept.
+
+Replace `plan_tick` with: edit the plan file directly, changing that task's
+`- [ ]` to `- [x]`. Say to match the exact line and leave surrounding text alone.
+
+In `/handoff parallel`, replace `slice_disjoint` with a prose instruction: list
+the files the current work touches and the files the candidate slice touches,
+map each to its module using the `modules` config when present or the first two
+path components otherwise, and refuse when the two sets share a module. Preserve
+the refusal rule verbatim — **refuse rather than guess** — and say the refusal
+must name the shared module.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `bash tests/run.sh`
+Expected: PASS — `0 failed`. Report the true before and after tallies; the total
+will **drop**, since `tests/slice_test.sh` is deleted. A falling tally is correct
+here and must not be papered over.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git rm plugins/erict-skills/lib/slice.sh tests/slice_test.sh
+git add -A
+git commit -m "refactor: keep shell for gates, vcs and plan reads; move the rest to prose"
+```
+
+---
+
 ## Self-Review
 
 **Spec coverage.** Every spec section maps to a task: distribution → 10; three
