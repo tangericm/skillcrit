@@ -46,3 +46,61 @@ test_reconcile_handles_empty_input() {
   out="$(adv_reconcile "$a" "$b")"
   assert_eq "0" "$(printf '%s' "$out" | jq '.agreed | length')" "empty reconciles cleanly"
 }
+
+test_reconcile_rejects_missing_refuted_both_sides() {
+  local a b
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks","evidence":"e","severity":"high"}]'
+  _write_findings "$b" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks too","evidence":"e2","severity":"high"}]'
+  assert_fails "rejects both sides missing refuted" adv_reconcile "$a" "$b"
+}
+
+test_reconcile_rejects_missing_refuted_one_side() {
+  local a b
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks","evidence":"e","severity":"high","refuted":false}]'
+  _write_findings "$b" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks too","evidence":"e2","severity":"high"}]'
+  assert_fails "rejects one side missing refuted" adv_reconcile "$a" "$b"
+}
+
+test_reconcile_rejects_missing_file() {
+  local a b
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"line":10,"category":"correctness","claim":"leaks","evidence":"e","severity":"high","refuted":false}]'
+  _write_findings "$b" '[]'
+  assert_fails "rejects missing file" adv_reconcile "$a" "$b"
+}
+
+test_reconcile_rejects_missing_line() {
+  local a b
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"file":"x.gd","category":"correctness","claim":"leaks","evidence":"e","severity":"high","refuted":false}]'
+  _write_findings "$b" '[]'
+  assert_fails "rejects missing line" adv_reconcile "$a" "$b"
+}
+
+test_reconcile_rejects_missing_category() {
+  local a b
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"file":"x.gd","line":10,"claim":"leaks","evidence":"e","severity":"high","refuted":false}]'
+  _write_findings "$b" '[]'
+  assert_fails "rejects missing category" adv_reconcile "$a" "$b"
+}
+
+test_reconcile_valid_agreement_still_works() {
+  local a b out
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks","evidence":"e","severity":"high","refuted":false}]'
+  _write_findings "$b" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks too","evidence":"e2","severity":"high","refuted":false}]'
+  out="$(adv_reconcile "$a" "$b")"
+  assert_eq "1" "$(printf '%s' "$out" | jq '.agreed | length')" "valid agreement still works"
+}
+
+test_reconcile_valid_contradiction_still_works() {
+  local a b out
+  a="$(mktemp)"; b="$(mktemp)"
+  _write_findings "$a" '[{"file":"x.gd","line":10,"category":"correctness","claim":"leaks","evidence":"e","severity":"high","refuted":false}]'
+  _write_findings "$b" '[{"file":"x.gd","line":10,"category":"correctness","claim":"does not leak","evidence":"e2","severity":"high","refuted":true}]'
+  out="$(adv_reconcile "$a" "$b")"
+  assert_eq "1" "$(printf '%s' "$out" | jq '.contradictory | length')" "valid contradiction still works"
+}
