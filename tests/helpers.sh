@@ -23,6 +23,7 @@ assert_contains() {
   esac
 }
 
+# assert_fails <label> <cmd...> - verify cmd exits non-zero; label is first, not final
 assert_fails() {
   local label="$1"; shift
   if "$@" >/dev/null 2>&1; then

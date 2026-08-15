@@ -54,7 +54,7 @@
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `assert_eq <expected> <actual> <label>`, `assert_fails <cmd...>`, `assert_contains <haystack> <needle> <label>`, `mktemp_repo` (creates a throwaway git repo, echoes its path). Every later task's tests use these.
+- Produces: `assert_eq <expected> <actual> <label>`, `assert_fails <label> <cmd...>`, `assert_contains <haystack> <needle> <label>`, `mktemp_repo` (creates a throwaway git repo, echoes its path). Every later task's tests use these.
 
 - [ ] **Step 1: Write the failing test**
 
