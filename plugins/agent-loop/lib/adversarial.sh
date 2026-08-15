@@ -50,9 +50,12 @@ adv_counterpart() {
 }
 
 adv_counterpart_bin() {
-  case "$(adv_counterpart "$1")" in
+  local other
+  other="$(adv_counterpart "$1")" || return 1
+  case "$other" in
     codex)  printf '%s' "$ADV_CODEX_BIN" ;;
     claude) printf '%s' "$ADV_CLAUDE_BIN" ;;
+    *)      return 1 ;;
   esac
 }
 
@@ -68,16 +71,20 @@ adv_check_counterpart() {
 }
 
 adv_counterpart_cmd() {
-  local self="$1" prompt_file="$2" out_file="$3" schema
+  local self="$1" prompt_file="$2" out_file="$3" schema other
   schema="$(cd "$(dirname "${BASH_SOURCE[0]}")/../schema" && pwd)/findings.schema.json"
-  case "$(adv_counterpart "$self")" in
+  other="$(adv_counterpart "$self")" || return 1
+  case "$other" in
     codex)
-      printf '%s exec -s read-only -C %s --output-schema %s -o %s - < %s' \
+      printf '%s exec -s read-only -C %q --output-schema %q -o %q - < %q' \
         "$ADV_CODEX_BIN" "${AGENT_REPO:-.}" "$schema" "$out_file" "$prompt_file"
       ;;
     claude)
-      printf '%s -p --output-format json < %s > %s' \
+      printf '%s -p --output-format json < %q > %q' \
         "$ADV_CLAUDE_BIN" "$prompt_file" "$out_file"
+      ;;
+    *)
+      return 1
       ;;
   esac
 }
