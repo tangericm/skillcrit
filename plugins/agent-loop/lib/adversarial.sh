@@ -31,3 +31,53 @@ adv_reconcile() {
     }
   '
 }
+
+# --- counterpart routing -----------------------------------------------------
+# Self-review is prevented by an explicit flag, never by sniffing the environment.
+
+ADV_CODEX_BIN="${ADV_CODEX_BIN:-codex}"
+ADV_CLAUDE_BIN="${ADV_CLAUDE_BIN:-claude}"
+
+adv_counterpart() {
+  case "$1" in
+    claude) printf 'codex' ;;
+    codex)  printf 'claude' ;;
+    *)
+      printf 'unknown engine: %s (expected claude or codex)\n' "$1" >&2
+      return 1
+      ;;
+  esac
+}
+
+adv_counterpart_bin() {
+  case "$(adv_counterpart "$1")" in
+    codex)  printf '%s' "$ADV_CODEX_BIN" ;;
+    claude) printf '%s' "$ADV_CLAUDE_BIN" ;;
+  esac
+}
+
+adv_check_counterpart() {
+  local self="$1" bin
+  bin="$(adv_counterpart_bin "$self")" || return 1
+  if ! command -v "$bin" >/dev/null 2>&1; then
+    printf 'counterpart engine %s is not available (looked for %s). Refusing to run a single-engine review.\n' \
+      "$(adv_counterpart "$self")" "$bin" >&2
+    return 1
+  fi
+  return 0
+}
+
+adv_counterpart_cmd() {
+  local self="$1" prompt_file="$2" out_file="$3" schema
+  schema="$(cd "$(dirname "${BASH_SOURCE[0]}")/../schema" && pwd)/findings.schema.json"
+  case "$(adv_counterpart "$self")" in
+    codex)
+      printf '%s exec -s read-only -C %s --output-schema %s -o %s - < %s' \
+        "$ADV_CODEX_BIN" "${AGENT_REPO:-.}" "$schema" "$out_file" "$prompt_file"
+      ;;
+    claude)
+      printf '%s -p --output-format json < %s > %s' \
+        "$ADV_CLAUDE_BIN" "$prompt_file" "$out_file"
+      ;;
+  esac
+}
