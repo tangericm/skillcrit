@@ -1,0 +1,31 @@
+{
+  "name": "agent-loop",
+  "description": "Durable session position, unattended plan execution, and cross-engine adversarial review.",
+  "author": { "name": "Eric Tang" },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/session_start.sh\"",
+            "timeout": 5,
+            "statusMessage": "Loading session cursor..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/git_guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
