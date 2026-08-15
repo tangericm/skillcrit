@@ -1,0 +1,14 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "eric-tang-skills",
+  "description": "Cross-engine agent workflow commands: durable session position, one-task execution, unattended plan runs, and adversarial review across Claude Code and Codex.",
+  "owner": { "name": "Eric Tang" },
+  "plugins": [
+    {
+      "name": "agent-loop",
+      "description": "Durable session position and cross-engine review for any repository.",
+      "source": "./plugins/agent-loop",
+      "category": "workflow"
+    }
+  ]
+}

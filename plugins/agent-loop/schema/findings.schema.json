@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Adversarial review findings",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["file", "line", "category", "claim", "evidence", "severity", "refuted"],
+    "additionalProperties": false,
+    "properties": {
+      "file": { "type": "string" },
+      "line": { "type": "integer", "minimum": 0 },
+      "category": { "enum": ["correctness", "spec", "invariant", "security", "test-gap"] },
+      "claim": { "type": "string" },
+      "evidence": { "type": "string" },
+      "severity": { "enum": ["high", "medium", "low"] },
+      "refuted": {
+        "type": "boolean",
+        "description": "true when the reviewer concludes the work does NOT satisfy the criterion"
+      }
+    }
+  }
+}

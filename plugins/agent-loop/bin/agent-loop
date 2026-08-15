@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Self-contained entry point for the agent-loop library.
+#
+# An agent's Bash tool calls do NOT share shell state: each call is a fresh
+# process, so a variable set or a function sourced in one call is gone in the
+# next. Nothing may rely on a prior `. env.sh`. This wrapper re-sources the
+# whole library on every single invocation, so every call is independent and
+# correct on its own — the caller only ever needs this file's absolute path.
+#
+# Usage:
+#   agent-loop <claude|codex> <function> [args...]
+#
+#   engine     Passed straight through to erict_env, which is what
+#              adv_check_counterpart / adv_counterpart_cmd use to find "the
+#              other engine". Anything else fails loudly rather than
+#              silently defaulting to one engine or the other.
+#   function   The name of any function defined in lib/*.sh — cfg_get,
+#              detect_plan, plan_counts, state_get, gate_run, vcs_can_commit,
+#              adv_reconcile, and so on. Unknown names fail loudly instead of
+#              falling through to the shell builtin/PATH lookup of the same
+#              name.
+#   args       Forwarded verbatim to that function.
+#
+# Exit status is exactly the wrapped function's. Stdout is passed through
+# unchanged (nothing is prefixed, wrapped, or swallowed), so
+# `$(agent-loop claude plan_counts "$plan")` behaves like calling the
+# function directly in a persistent shell would.
+set -u
+
+usage() {
+  printf 'usage: %s <claude|codex> <function> [args...]\n' "$(basename "$0")" >&2
+}
+
+lib="$(cd "$(dirname "$0")/../lib" && pwd)"
+. "$lib/env.sh"
+
+engine="${1:-}"
+case "$engine" in
+  claude|codex)
+    ;;
+  "")
+    printf 'agent-loop: missing engine argument\n' >&2
+    usage
+    exit 2
+    ;;
+  *)
+    printf 'agent-loop: unknown engine: %s (expected claude or codex)\n' "$engine" >&2
+    usage
+    exit 2
+    ;;
+esac
+shift
+
+fn="${1:-}"
+if [ -z "$fn" ]; then
+  printf 'agent-loop: missing function name\n' >&2
+  usage
+  exit 2
+fi
+shift
+
+erict_env "$engine" || exit 1
+
+if [ "$(type -t "$fn" 2>/dev/null)" != "function" ]; then
+  printf 'agent-loop: unknown library function: %s\n' "$fn" >&2
+  exit 2
+fi
+
+"$fn" "$@"

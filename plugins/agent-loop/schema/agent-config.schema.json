@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "agent-loop agent config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "glob": { "type": "string" },
+        "active": { "type": ["string", "null"] }
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "focused": { "type": "string" },
+        "suite": { "type": "string" },
+        "full": { "type": "string" }
+      }
+    },
+    "gate_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "commit_requires": { "enum": ["focused", "suite", "full"] },
+        "halt_requires": { "enum": ["focused", "suite", "full"] },
+        "escalate_when": {
+          "type": "object",
+          "additionalProperties": { "enum": ["focused", "suite", "full"] }
+        }
+      }
+    },
+    "vcs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branch_prefix": { "type": "string" },
+        "worktree_root": { "type": "string" },
+        "auto_commit": { "type": "boolean" },
+        "default_branch": { "type": "string" }
+      }
+    },
+    "human_gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "glob": { "type": "string" },
+        "marker": { "type": "string" }
+      }
+    },
+    "modules": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "preflight": { "type": "array", "items": { "type": "string" } },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "rules": { "type": "string" } }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_tasks": { "type": "integer", "minimum": 1 },
+        "max_minutes": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

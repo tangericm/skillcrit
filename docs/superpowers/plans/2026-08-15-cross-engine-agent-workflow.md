@@ -1,4 +1,4 @@
-# erict-skills Cross-Engine Agent Workflow Implementation Plan
+# agent-loop Cross-Engine Agent Workflow Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -26,21 +26,22 @@
 
 | Path | Responsibility |
 |---|---|
-| `plugins/erict-skills/lib/config.sh` | read `.agent/config.json` with defaults |
-| `plugins/erict-skills/lib/detect.sh` | discover plan files and gate commands in an unconfigured repo |
-| `plugins/erict-skills/lib/state.sh` | read/write `.agent/state.md`, notes cap, concurrent-writer lock |
-| `plugins/erict-skills/lib/plan.sh` | locate next unchecked task, count tasks, tick a checkbox |
-| `plugins/erict-skills/lib/gate.sh` | choose and run a gate level |
-| `plugins/erict-skills/lib/vcs.sh` | default-branch refusal, `PATH` preflight, commit |
-| `plugins/erict-skills/lib/slice.sh` | prove two work slices are disjoint |
-| `plugins/erict-skills/lib/adversarial.sh` | route to the counterpart engine, reconcile verdicts |
-| `plugins/erict-skills/schema/agent-config.schema.json` | validate `.agent/config.json` |
-| `plugins/erict-skills/schema/findings.schema.json` | validate reviewer output |
-| `plugins/erict-skills/skills/session-state/SKILL.md` | procedure for `/status` `/next` `/auto` `/handoff` |
-| `plugins/erict-skills/skills/adversarial-review/SKILL.md` | procedure for `/adversarial` |
-| `plugins/erict-skills/commands/*.md` | Claude-only shims naming the skill |
-| `.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json` | Claude packaging + hooks |
-| `plugins/erict-skills/.codex-plugin/plugin.json` | Codex packaging |
+| `plugins/agent-loop/lib/config.sh` | read `.agent/config.json` with defaults |
+| `plugins/agent-loop/lib/detect.sh` | discover plan files and gate commands in an unconfigured repo |
+| `plugins/agent-loop/lib/state.sh` | read/write `.agent/state.md`, notes cap, concurrent-writer lock |
+| `plugins/agent-loop/lib/plan.sh` | locate next unchecked task, count tasks, tick a checkbox |
+| `plugins/agent-loop/lib/gate.sh` | choose and run a gate level |
+| `plugins/agent-loop/lib/vcs.sh` | default-branch refusal, `PATH` preflight, commit |
+| `plugins/agent-loop/lib/slice.sh` | prove two work slices are disjoint |
+| `plugins/agent-loop/lib/adversarial.sh` | route to the counterpart engine, reconcile verdicts |
+| `plugins/agent-loop/schema/agent-config.schema.json` | validate `.agent/config.json` |
+| `plugins/agent-loop/schema/findings.schema.json` | validate reviewer output |
+| `plugins/agent-loop/skills/session-state/SKILL.md` | procedure for `/status` `/next` `/auto` `/handoff` |
+| `plugins/agent-loop/skills/adversarial-review/SKILL.md` | procedure for `/adversarial` |
+| `plugins/agent-loop/commands/*.md` | Claude-only shims naming the skill |
+| `.claude-plugin/marketplace.json` | Claude marketplace listing, at the repo root — this is the one file Claude always looks for at a fixed location |
+| `plugins/agent-loop/.claude-plugin/plugin.json` | Claude plugin manifest + hooks, under the marketplace's declared `source` (`./plugins/agent-loop`) — Claude resolves the plugin root from that `source` value and reads `<source>/.claude-plugin/plugin.json` from there, not from the repo root |
+| `plugins/agent-loop/.codex-plugin/plugin.json` | Codex packaging |
 | `tests/run.sh`, `tests/*_test.sh` | bash fixtures |
 
 ---
@@ -54,7 +55,7 @@
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `assert_eq <expected> <actual> <label>`, `assert_fails <cmd...>`, `assert_contains <haystack> <needle> <label>`, `mktemp_repo` (creates a throwaway git repo, echoes its path). Every later task's tests use these.
+- Produces: `assert_eq <expected> <actual> <label>`, `assert_fails <label> <cmd...>`, `assert_contains <haystack> <needle> <label>`, `mktemp_repo` (creates a throwaway git repo, echoes its path). Every later task's tests use these.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -138,7 +139,7 @@ mktemp_repo() {
 #!/bin/bash
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export ERICT_LIB="$ROOT/plugins/erict-skills/lib"
+export AGENT_LOOP_LIB="$ROOT/plugins/agent-loop/lib"
 . "$ROOT/tests/helpers.sh"
 
 for file in "$ROOT"/tests/*_test.sh; do
@@ -171,8 +172,8 @@ git commit -m "test: add bash fixture harness"
 ### Task 2: Configuration reader
 
 **Files:**
-- Create: `plugins/erict-skills/lib/config.sh`
-- Create: `plugins/erict-skills/schema/agent-config.schema.json`
+- Create: `plugins/agent-loop/lib/config.sh`
+- Create: `plugins/agent-loop/schema/agent-config.schema.json`
 - Create: `tests/config_test.sh`
 
 **Interfaces:**
@@ -188,7 +189,7 @@ git commit -m "test: add bash fixture harness"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
+. "$AGENT_LOOP_LIB/config.sh"
 
 test_cfg_get_returns_default_when_no_config() {
   AGENT_REPO="$(mktemp_repo)"
@@ -232,7 +233,7 @@ Expected: FAIL — `config.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/config.sh`:
+`plugins/agent-loop/lib/config.sh`:
 
 ```bash
 #!/bin/bash
@@ -261,12 +262,12 @@ cfg_get() {
 }
 ```
 
-`plugins/erict-skills/schema/agent-config.schema.json`:
+`plugins/agent-loop/schema/agent-config.schema.json`:
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "erict-skills agent config",
+  "title": "agent-loop agent config",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -306,7 +307,8 @@ cfg_get() {
       "properties": {
         "branch_prefix": { "type": "string" },
         "worktree_root": { "type": "string" },
-        "auto_commit": { "type": "boolean" }
+        "auto_commit": { "type": "boolean" },
+        "default_branch": { "type": "string" }
       }
     },
     "human_gate": {
@@ -347,7 +349,7 @@ Expected: PASS — 5 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/config.sh plugins/erict-skills/schema/agent-config.schema.json tests/config_test.sh
+git add plugins/agent-loop/lib/config.sh plugins/agent-loop/schema/agent-config.schema.json tests/config_test.sh
 git commit -m "feat: read optional .agent/config.json with defaults"
 ```
 
@@ -356,7 +358,7 @@ git commit -m "feat: read optional .agent/config.json with defaults"
 ### Task 3: Plan and gate detection
 
 **Files:**
-- Create: `plugins/erict-skills/lib/detect.sh`
+- Create: `plugins/agent-loop/lib/detect.sh`
 - Create: `tests/detect_test.sh`
 
 **Interfaces:**
@@ -371,8 +373,8 @@ git commit -m "feat: read optional .agent/config.json with defaults"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
 
 test_detect_plan_finds_todo_in_bare_repo() {
   AGENT_REPO="$(mktemp_repo)"
@@ -422,6 +424,14 @@ test_detect_gate_empty_when_nothing_found() {
   AGENT_REPO="$(mktemp_repo)"
   assert_eq "" "$(detect_gate suite)" "bare repo has no gate"
 }
+
+test_detect_gate_honours_an_explicitly_blank_gate() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gates":{"suite":""}}\n' > "$AGENT_REPO/.agent/config.json"
+  printf '{"scripts":{"test":"vitest run"}}\n' > "$AGENT_REPO/package.json"
+  assert_eq "" "$(detect_gate suite)" "blank gate means none, not auto-detect"
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -431,7 +441,7 @@ Expected: FAIL — `detect.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/detect.sh`:
+`plugins/agent-loop/lib/detect.sh`:
 
 ```bash
 #!/bin/bash
@@ -486,8 +496,11 @@ detect_plan() {
 
 detect_gate() {
   local level="$1" repo="${AGENT_REPO:-.}" configured
-  configured="$(cfg_get "gates.$level" '')"
-  if [ -n "$configured" ]; then
+  # Sentinel default, so an explicitly configured empty string means "this
+  # project has no gate at this level" and reaches gate_run, which fails
+  # loudly — rather than silently falling through to auto-detection.
+  configured="$(cfg_get "gates.$level" '@@UNSET@@')"
+  if [ "$configured" != "@@UNSET@@" ]; then
     printf '%s' "$configured"
     return 0
   fi
@@ -514,7 +527,7 @@ Expected: PASS — 7 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/detect.sh tests/detect_test.sh
+git add plugins/agent-loop/lib/detect.sh tests/detect_test.sh
 git commit -m "feat: detect plans and gates in unconfigured repositories"
 ```
 
@@ -523,7 +536,7 @@ git commit -m "feat: detect plans and gates in unconfigured repositories"
 ### Task 4: State file read and write
 
 **Files:**
-- Create: `plugins/erict-skills/lib/state.sh`
+- Create: `plugins/agent-loop/lib/state.sh`
 - Create: `tests/state_test.sh`
 
 **Interfaces:**
@@ -541,8 +554,8 @@ git commit -m "feat: detect plans and gates in unconfigured repositories"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/state.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/state.sh"
 
 test_state_round_trip() {
   AGENT_REPO="$(mktemp_repo)"
@@ -608,7 +621,7 @@ Expected: FAIL — `state.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/state.sh`:
+`plugins/agent-loop/lib/state.sh`:
 
 ```bash
 #!/bin/bash
@@ -641,8 +654,13 @@ state_section() {
   awk -v h="## $name" '
     $0 == h { grab = 1; next }
     grab && /^## / { exit }
-    grab { print }
-  ' "$file" | awk 'NF { blank = 0; buf = buf sep $0; sep = "\n" } END { print buf }'
+    grab { lines[n++] = $0 }
+    END {
+      last = -1
+      for (i = 0; i < n; i++) if (lines[i] ~ /[^[:space:]]/) last = i
+      for (i = 0; i <= last; i++) print lines[i]
+    }
+  ' "$file"
 }
 
 state_lock_ok() {
@@ -668,7 +686,41 @@ state_write() {
   file="$(state_path)"
   dir="$(dirname "$file")"
   mkdir -p "$dir"
-  capped="$(printf '%s\n' "$notes" | grep -v '^$' | tail -n "$STATE_NOTES_MAX")"
+  capped="$(printf '%s\n' "$notes" | awk '
+    { lines[n++] = $0 }
+    END {
+      first = -1
+      last = -1
+      for (i = 0; i < n; i++) {
+        if (lines[i] ~ /[^[:space:]]/) {
+          if (first == -1) first = i
+          last = i
+        }
+      }
+      if (first >= 0) {
+        trimmed_n = last - first + 1
+        if (trimmed_n > '"$STATE_NOTES_MAX"') {
+          start = trimmed_n - '"$STATE_NOTES_MAX"'
+        } else {
+          start = 0
+        }
+        for (i = start; i <= last - first; i++) {
+          window[w++] = lines[first + i]
+        }
+        w_first = -1
+        w_last = -1
+        for (i = 0; i < w; i++) {
+          if (window[i] ~ /[^[:space:]]/) {
+            if (w_first == -1) w_first = i
+            w_last = i
+          }
+        }
+        if (w_first >= 0) {
+          for (i = w_first; i <= w_last; i++) print window[i]
+        }
+      }
+    }
+  ')"
   {
     printf -- '---\n'
     printf 'plan: %s\n' "$plan"
@@ -696,7 +748,7 @@ Expected: PASS — 9 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/state.sh tests/state_test.sh
+git add plugins/agent-loop/lib/state.sh tests/state_test.sh
 git commit -m "feat: read and write the session cursor with a writer lock"
 ```
 
@@ -705,7 +757,7 @@ git commit -m "feat: read and write the session cursor with a writer lock"
 ### Task 5: Plan task navigation
 
 **Files:**
-- Create: `plugins/erict-skills/lib/plan.sh`
+- Create: `plugins/agent-loop/lib/plan.sh`
 - Create: `tests/plan_test.sh`
 
 **Interfaces:**
@@ -725,8 +777,8 @@ git commit -m "feat: read and write the session cursor with a writer lock"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/plan.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/plan.sh"
 
 _fixture_plan() {
   AGENT_REPO="$(mktemp_repo)"
@@ -768,6 +820,11 @@ test_plan_next_line_empty_when_complete() {
   assert_eq "" "$(plan_next_line "$AGENT_REPO/PLAN.md")" "no open tasks"
 }
 
+test_plan_counts_returns_two_fields_for_a_missing_plan() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_eq "0 0" "$(plan_counts "$AGENT_REPO/nope.md")" "missing plan still yields two numbers"
+}
+
 test_plan_tick_is_idempotent_on_checked_line() {
   local p; p="$(_fixture_plan)"
   plan_tick "$p" 3
@@ -798,7 +855,7 @@ Expected: FAIL — `plan.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/plan.sh`:
+`plugins/agent-loop/lib/plan.sh`:
 
 ```bash
 #!/bin/bash
@@ -823,7 +880,9 @@ plan_next_text() {
 
 plan_counts() {
   local plan="$1" done_n total_n
-  [ -f "$plan" ] || return 0
+  # Callers parse two fields, so a missing plan must still yield two numbers
+  # rather than an empty string.
+  [ -f "$plan" ] || { printf '0 0'; return 0; }
   done_n="$(awk '/^[[:space:]]*- \[[xX]\]/ { n++ } END { print n + 0 }' "$plan")"
   total_n="$(awk '/^[[:space:]]*- \[[ xX]\]/ { n++ } END { print n + 0 }' "$plan")"
   printf '%s %s' "$done_n" "$total_n"
@@ -869,7 +928,7 @@ Expected: PASS — 7 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/plan.sh tests/plan_test.sh
+git add plugins/agent-loop/lib/plan.sh tests/plan_test.sh
 git commit -m "feat: navigate and tick markdown plan checkboxes"
 ```
 
@@ -878,7 +937,7 @@ git commit -m "feat: navigate and tick markdown plan checkboxes"
 ### Task 6: Gate selection and execution
 
 **Files:**
-- Create: `plugins/erict-skills/lib/gate.sh`
+- Create: `plugins/agent-loop/lib/gate.sh`
 - Create: `tests/gate_test.sh`
 
 **Interfaces:**
@@ -894,9 +953,9 @@ git commit -m "feat: navigate and tick markdown plan checkboxes"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/detect.sh"
-. "$ERICT_LIB/gate.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/gate.sh"
 
 _gate_repo() {
   AGENT_REPO="$(mktemp_repo)"
@@ -936,6 +995,27 @@ test_gate_run_fails_loudly_without_a_command() {
   AGENT_REPO="$(mktemp_repo)"
   assert_fails "no gate is an error" gate_run suite
 }
+
+test_gate_level_rejects_an_unknown_configured_level() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gate_policy":{"commit_requires":"ful"}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_fails "typo'd gate level fails loudly" gate_level_for src/a.ts
+}
+
+test_gate_level_rejects_an_unknown_escalation_level() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gate_policy":{"escalate_when":{"src/*":"complete"}}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_fails "typo'd escalation level fails loudly" gate_level_for src/a.ts
+}
+
+test_gate_level_matches_a_pattern_containing_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gate_policy":{"escalate_when":{"my src/*":"full"}}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_eq "full" "$(gate_level_for 'my src/kernel.gd')" "space in pattern still escalates"
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -945,7 +1025,7 @@ Expected: FAIL — `gate.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/gate.sh`:
+`plugins/agent-loop/lib/gate.sh`:
 
 ```bash
 #!/bin/bash
@@ -965,7 +1045,10 @@ gate_name_for_rank() {
     1) printf 'focused' ;;
     2) printf 'suite' ;;
     3) printf 'full' ;;
-    *) printf 'focused' ;;
+    *)
+      printf 'gate_name_for_rank: unknown rank %s\n' "$1" >&2
+      return 1
+      ;;
   esac
 }
 
@@ -973,18 +1056,31 @@ gate_level_for() {
   local floor best rank pattern level file rules
   floor="$(cfg_get gate_policy.commit_requires 'focused')"
   best="$(gate_rank "$floor")"
+  if [ "$best" -eq 0 ]; then
+    printf 'unknown gate level in gate_policy.commit_requires: %s\n' "$floor" >&2
+    return 1
+  fi
 
   rules="$(cfg_get gate_policy.escalate_when '{}')"
   for file in "$@"; do
-    for pattern in $(printf '%s' "$rules" | jq -r 'keys[]' 2>/dev/null); do
+    # A here-doc keeps this loop in the current shell — a pipe would run it in a
+    # subshell and discard "best". read -r preserves patterns containing spaces.
+    while IFS= read -r pattern; do
+      [ -n "$pattern" ] || continue
       case "$file" in
         $pattern)
           level="$(printf '%s' "$rules" | jq -r --arg k "$pattern" '.[$k]')"
           rank="$(gate_rank "$level")"
+          if [ "$rank" -eq 0 ]; then
+            printf 'unknown gate level in gate_policy.escalate_when["%s"]: %s\n' "$pattern" "$level" >&2
+            return 1
+          fi
           [ "$rank" -gt "$best" ] && best="$rank"
           ;;
       esac
-    done
+    done <<EOF
+$(printf '%s' "$rules" | jq -r 'keys[]' 2>/dev/null)
+EOF
   done
   gate_name_for_rank "$best"
 }
@@ -1008,7 +1104,7 @@ Expected: PASS — 5 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/gate.sh tests/gate_test.sh
+git add plugins/agent-loop/lib/gate.sh tests/gate_test.sh
 git commit -m "feat: select and run the narrowest proving gate"
 ```
 
@@ -1017,7 +1113,7 @@ git commit -m "feat: select and run the narrowest proving gate"
 ### Task 7: Version-control safety rails
 
 **Files:**
-- Create: `plugins/erict-skills/lib/vcs.sh`
+- Create: `plugins/agent-loop/lib/vcs.sh`
 - Create: `tests/vcs_test.sh`
 
 **Interfaces:**
@@ -1036,8 +1132,8 @@ git commit -m "feat: select and run the narrowest proving gate"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/vcs.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/vcs.sh"
 
 test_default_branch_is_main() {
   AGENT_REPO="$(mktemp_repo)"
@@ -1095,7 +1191,7 @@ Expected: FAIL — `vcs.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/vcs.sh`:
+`plugins/agent-loop/lib/vcs.sh`:
 
 ```bash
 #!/bin/bash
@@ -1107,7 +1203,12 @@ _git() {
 }
 
 vcs_default_branch() {
-  local ref
+  local ref explicit
+  explicit="$(cfg_get vcs.default_branch '')"
+  if [ -n "$explicit" ]; then
+    printf '%s' "$explicit"
+    return 0
+  fi
   ref="$(_git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
   if [ -n "$ref" ]; then
     printf '%s' "${ref#origin/}"
@@ -1115,7 +1216,6 @@ vcs_default_branch() {
   fi
   if _git show-ref --verify --quiet refs/heads/main; then printf 'main'; return 0; fi
   if _git show-ref --verify --quiet refs/heads/master; then printf 'master'; return 0; fi
-  printf 'main'
 }
 
 vcs_current_branch() {
@@ -1123,7 +1223,16 @@ vcs_current_branch() {
 }
 
 vcs_on_default_branch() {
-  [ "$(vcs_current_branch)" = "$(vcs_default_branch)" ]
+  local current default
+  current="$(vcs_current_branch)"
+  default="$(vcs_default_branch)"
+  if [ "$current" = "HEAD" ]; then
+    return 0
+  fi
+  if [ -z "$default" ]; then
+    return 0
+  fi
+  [ "$current" = "$default" ]
 }
 
 vcs_preflight() {
@@ -1139,8 +1248,19 @@ vcs_preflight() {
 }
 
 vcs_can_commit() {
-  if vcs_on_default_branch; then
-    printf 'refusing to commit on the default branch (%s)\n' "$(vcs_default_branch)" >&2
+  local current default
+  current="$(vcs_current_branch)"
+  default="$(vcs_default_branch)"
+  if [ "$current" = "HEAD" ]; then
+    printf 'refusing to commit: repository is in detached HEAD state\n' >&2
+    return 1
+  fi
+  if [ -z "$default" ]; then
+    printf 'refusing to commit: default branch is undeterminable. Set vcs.default_branch in .agent/config.json\n' >&2
+    return 1
+  fi
+  if [ "$current" = "$default" ]; then
+    printf 'refusing to commit on the default branch (%s)\n' "$default" >&2
     return 1
   fi
   if [ "$(cfg_get vcs.auto_commit 'true')" = "false" ]; then
@@ -1166,7 +1286,7 @@ Expected: PASS — 8 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/vcs.sh tests/vcs_test.sh
+git add plugins/agent-loop/lib/vcs.sh tests/vcs_test.sh
 git commit -m "feat: add version-control safety rails"
 ```
 
@@ -1175,7 +1295,7 @@ git commit -m "feat: add version-control safety rails"
 ### Task 8: Disjoint slice proof for parallel handoff
 
 **Files:**
-- Create: `plugins/erict-skills/lib/slice.sh`
+- Create: `plugins/agent-loop/lib/slice.sh`
 - Create: `tests/slice_test.sh`
 
 **Interfaces:**
@@ -1190,8 +1310,8 @@ git commit -m "feat: add version-control safety rails"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/slice.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/slice.sh"
 
 _slice_repo() {
   AGENT_REPO="$(mktemp_repo)"
@@ -1232,6 +1352,31 @@ test_slice_disjoint_rejects_identical_file() {
   AGENT_REPO="$(mktemp_repo)"
   assert_fails "same file rejected" slice_disjoint "src/a/x.ts" "src/a/x.ts"
 }
+
+test_slice_module_handles_a_path_containing_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_eq "my src/core" "$(slice_module 'my src/core/x.ts')" "space in path keeps both components"
+}
+
+test_slice_disjoint_rejects_a_shared_module_across_paths_with_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_fails "shared module with spaces rejected" \
+    slice_disjoint 'my src/core/a.ts' 'my src/core/b.ts'
+}
+
+test_slice_disjoint_accepts_separate_modules_with_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  slice_disjoint 'my src/core/a.ts' 'my src/ui/b.ts'
+  assert_eq "0" "$?" "different modules with spaces are disjoint"
+}
+
+test_slice_disjoint_reads_multi_file_lists() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_fails "overlap anywhere in the lists is rejected" \
+    slice_disjoint 'src/a/x.ts
+src/b/y.ts' 'src/c/z.ts
+src/b/w.ts'
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1241,7 +1386,7 @@ Expected: FAIL — `slice.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/slice.sh`:
+`plugins/agent-loop/lib/slice.sh`:
 
 ```bash
 #!/bin/bash
@@ -1250,31 +1395,42 @@ Expected: FAIL — `slice.sh: No such file or directory`
 slice_module() {
   local file="$1" modules name pattern
   modules="$(cfg_get modules '{}')"
-  for name in $(printf '%s' "$modules" | jq -r 'keys[]' 2>/dev/null); do
+  # here-doc, not a pipe: the loop must return from the calling shell, and
+  # read -r keeps module names containing spaces intact.
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
     pattern="$(printf '%s' "$modules" | jq -r --arg k "$name" '.[$k]')"
     case "$file" in
       $pattern) printf '%s' "$name"; return 0 ;;
     esac
-  done
+  done <<EOF
+$(printf '%s' "$modules" | jq -r 'keys[]' 2>/dev/null)
+EOF
   printf '%s' "$file" | awk -F/ '{ if (NF >= 2) print $1 "/" $2; else print $1 }'
 }
 
 slice_disjoint() {
-  local a_files="$1" b_files="$2" a b a_mods
+  local a_files="$1" b_files="$2" a b a_mods b_mod
   a_mods=""
-  for a in $a_files; do
-    a_mods="$a_mods $(slice_module "$a")"
-  done
-  for b in $b_files; do
-    local b_mod
+  # File lists are newline-separated. Word-splitting would break any path
+  # containing a space, so every loop here reads line by line.
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    a_mods="$a_mods
+$(slice_module "$a")"
+  done <<EOF
+$a_files
+EOF
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
     b_mod="$(slice_module "$b")"
-    case " $a_mods " in
-      *" $b_mod "*)
-        printf 'slices are not disjoint: both touch %s\n' "$b_mod" >&2
-        return 1
-        ;;
-    esac
-  done
+    if printf '%s\n' "$a_mods" | grep -Fxq -- "$b_mod"; then
+      printf 'slices are not disjoint: both touch %s\n' "$b_mod" >&2
+      return 1
+    fi
+  done <<EOF
+$b_files
+EOF
   return 0
 }
 ```
@@ -1287,7 +1443,7 @@ Expected: PASS — 5 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/slice.sh tests/slice_test.sh
+git add plugins/agent-loop/lib/slice.sh tests/slice_test.sh
 git commit -m "feat: prove work slices are disjoint before parallel handoff"
 ```
 
@@ -1296,13 +1452,13 @@ git commit -m "feat: prove work slices are disjoint before parallel handoff"
 ### Task 9: The session-state skill
 
 **Files:**
-- Create: `plugins/erict-skills/skills/session-state/SKILL.md`
-- Create: `plugins/erict-skills/commands/status.md`
-- Create: `plugins/erict-skills/commands/next.md`
-- Create: `plugins/erict-skills/commands/auto.md`
-- Create: `plugins/erict-skills/commands/handoff.md`
-- Create: `plugins/erict-skills/commands/plan.md`
-- Create: `plugins/erict-skills/lib/env.sh`
+- Create: `plugins/agent-loop/skills/session-state/SKILL.md`
+- Create: `plugins/agent-loop/commands/status.md`
+- Create: `plugins/agent-loop/commands/next.md`
+- Create: `plugins/agent-loop/commands/auto.md`
+- Create: `plugins/agent-loop/commands/handoff.md`
+- Create: `plugins/agent-loop/commands/plan.md`
+- Create: `plugins/agent-loop/lib/env.sh`
 - Create: `tests/env_test.sh`
 
 **Interfaces:**
@@ -1319,7 +1475,7 @@ git commit -m "feat: prove work slices are disjoint before parallel handoff"
 test_erict_env_sets_repo_and_engine() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env codex; printf '%s|%s' \"\$AGENT_REPO\" \"\$AGENT_ENGINE\"")"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env codex; printf '%s|%s' \"\$AGENT_REPO\" \"\$AGENT_ENGINE\"")"
   assert_contains "$out" "|codex" "engine exported"
   assert_contains "$out" "$(basename "$repo")" "repo toplevel exported"
 }
@@ -1327,7 +1483,7 @@ test_erict_env_sets_repo_and_engine() {
 test_erict_env_exposes_all_functions() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint | tr '\n' ' '")"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint | tr '\n' ' '")"
   assert_eq "function function function function function function " "$out" "all modules sourced"
 }
 ```
@@ -1339,7 +1495,7 @@ Expected: FAIL — `env.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/env.sh`:
+`plugins/agent-loop/lib/env.sh`:
 
 ```bash
 #!/bin/bash
@@ -1361,7 +1517,7 @@ erict_env() {
 }
 ```
 
-`plugins/erict-skills/skills/session-state/SKILL.md`:
+`plugins/agent-loop/skills/session-state/SKILL.md`:
 
 ```markdown
 ---
@@ -1382,15 +1538,15 @@ description: >
 Every command begins by sourcing the library. Run this first, always:
 
 ```bash
-ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
-  -path '*erict-skills*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$ERICT_LIB" ] || { echo "erict-skills lib not found"; exit 1; }
-. "$ERICT_LIB/env.sh" && erict_env claude   # or: erict_env codex
+AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
+  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
+[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
+. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
 ```
 
 Neither engine guarantees a variable naming the skill's own directory, and the
 pack lives under a different cache path in each. Discovery is the portable
-answer; export `ERICT_LIB` once and reuse it for the rest of the session.
+answer; export `AGENT_LOOP_LIB` once and reuse it for the rest of the session.
 
 Read `.agent/rules.md` (or whatever `review.rules` names) before implementing
 anything. It holds the project's own discipline, and it overrides this file.
@@ -1445,8 +1601,24 @@ Execute exactly one task, then stop.
 3. **Implement** following the project's testing discipline from the rules file.
 4. **Gate.** `gate_level_for <changed files>` then `gate_run <level>`.
 5. **Commit** on green with `vcs_commit`.
-6. **Record.** `plan_tick`, write the project's task report if it defines one,
-   then `state_write` with a fresh next step and working notes.
+6. **Record.** `plan_tick "$plan" "$line"`, where `$line` is the line number
+   `plan_next_line "$plan"` gave you in step 1 — marks the task done. Write
+   the project's task report if it defines one. Then call `state_write` with
+   all eight positional arguments, in this fixed order. The function performs
+   no validation: a transposed or short call corrupts the cursor silently
+   instead of failing.
+
+   ```bash
+   state_write \
+     "$plan" \                          # the active plan path, from detect_plan
+     "$next_task_number" \              # the task you just completed, plus one
+     "$total_tasks" \                   # plan_counts's SECOND field ("<done> <total>")
+     "$(vcs_current_branch)" \
+     "$(git rev-parse --short HEAD)" \  # the commit your gate just proved green
+     "$next_step" \                     # one imperative sentence
+     "$blockers" \                      # or "none"
+     "$notes"                           # capped working notes
+   ```
 7. **Stop.** Report in under ten lines.
 
 Write the cursor after *every* task, not at the end of the session. There is no
@@ -1473,8 +1645,11 @@ When `detect_plan` is empty, run `/plan` **and then stop** — do not roll strai
 into unattended execution of a plan the user has not seen. `/auto` executes
 approved intent; a plan written seconds ago by the same loop is not that.
 
-On halt: `state_write`, append a halt record to `.agent/journal.md`, then produce
-a `/handoff`. Report one summary, not per-task narration.
+On halt: call `state_write` with the same eight positional arguments as
+`/next` step 6 — plan, task, total, branch, last_green, next_step, blockers,
+notes, in that fixed order — then append a halt record to
+`.agent/journal.md`, then produce a `/handoff`. Report one summary, not
+per-task narration.
 
 ## /handoff [parallel]
 
@@ -1490,7 +1665,7 @@ ownership boundary explicitly. **If `slice_disjoint` fails, refuse and say why.*
 Do not guess.
 ```
 
-`plugins/erict-skills/commands/status.md`:
+`plugins/agent-loop/commands/status.md`:
 
 ```markdown
 ---
@@ -1501,7 +1676,7 @@ Use the `session-state` skill and follow its `/status` procedure. Call
 `erict_env claude`. Do not write any file.
 ```
 
-`plugins/erict-skills/commands/next.md`:
+`plugins/agent-loop/commands/next.md`:
 
 ```markdown
 ---
@@ -1512,7 +1687,7 @@ Use the `session-state` skill and follow its `/next` procedure. Call
 `erict_env claude`. Execute exactly one task and stop.
 ```
 
-`plugins/erict-skills/commands/auto.md`:
+`plugins/agent-loop/commands/auto.md`:
 
 ```markdown
 ---
@@ -1523,7 +1698,7 @@ Use the `session-state` skill and follow its `/auto` procedure. Call
 `erict_env claude`. Never merge, never push.
 ```
 
-`plugins/erict-skills/commands/plan.md`:
+`plugins/agent-loop/commands/plan.md`:
 
 ```markdown
 ---
@@ -1535,7 +1710,7 @@ Use the `session-state` skill and follow its `/plan` procedure. Call
 Never create a second plan when an open one already exists. Goal: $ARGUMENTS
 ```
 
-`plugins/erict-skills/commands/handoff.md`:
+`plugins/agent-loop/commands/handoff.md`:
 
 ```markdown
 ---
@@ -1554,7 +1729,7 @@ Expected: PASS — 3 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/env.sh plugins/erict-skills/skills/session-state/ plugins/erict-skills/commands/ tests/env_test.sh
+git add plugins/agent-loop/lib/env.sh plugins/agent-loop/skills/session-state/ plugins/agent-loop/commands/ tests/env_test.sh
 git commit -m "feat: add the session-state skill and command shims"
 ```
 
@@ -1564,15 +1739,28 @@ git commit -m "feat: add the session-state skill and command shims"
 
 **Files:**
 - Create: `.claude-plugin/marketplace.json`
-- Create: `.claude-plugin/plugin.json`
-- Create: `plugins/erict-skills/.codex-plugin/plugin.json`
-- Create: `plugins/erict-skills/hooks/session_start.sh`
-- Create: `plugins/erict-skills/hooks/git_guard.sh`
+- Create: `plugins/agent-loop/.claude-plugin/plugin.json`
+- Create: `plugins/agent-loop/.codex-plugin/plugin.json`
+- Create: `plugins/agent-loop/hooks/session_start.sh`
+- Create: `plugins/agent-loop/hooks/git_guard.sh`
 - Create: `tests/packaging_test.sh`
 
 **Interfaces:**
 - Consumes: `lib/env.sh` from Task 9
 - Produces: installable plugin in both engines. Hooks read `AGENT_REPO` from the invoking directory.
+
+**Why the plugin manifest lives under `plugins/agent-loop/`, not the repo root:**
+`marketplace.json` is the one file Claude looks for at a fixed location —
+the repo root — because that is what `claude plugin marketplace add` points
+at. Everything after that is resolved relative to the `source` each
+marketplace entry declares (`./plugins/agent-loop` here). Claude reads the
+plugin's own manifest from `<source>/.claude-plugin/plugin.json`, so that is
+where `plugin.json` must sit — a copy at the repo root is never opened, and
+its hooks silently never fire. The `caveman` reference pack looks like it
+puts `plugin.json` at the repo root, but its marketplace `source` is `"./"`,
+making the repo root *its* plugin root too; that layout is only correct
+when the plugin and the repo coincide, which is not the case for a
+multi-plugin-shaped repo with `plugins/<name>/` subdirectories.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1582,23 +1770,57 @@ git commit -m "feat: add the session-state skill and command shims"
 #!/bin/bash
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The plugin manifest lives wherever marketplace.json's "source" says it
+# does, not at a path we merely expect. Derive it instead of assuming it, or
+# a manifest sitting at the wrong path (unread by Claude) parses fine in a
+# test that checks the wrong file — which is exactly how this shipped broken.
+PLUGIN_SOURCE="$(jq -r '.plugins[0].source' "$ROOT_DIR/.claude-plugin/marketplace.json" 2>/dev/null)"
+PLUGIN_ROOT="$ROOT_DIR/${PLUGIN_SOURCE#./}"
+PLUGIN_MANIFEST="$PLUGIN_ROOT/.claude-plugin/plugin.json"
+
 test_manifests_are_valid_json() {
   assert_eq "0" "$(jq -e . "$ROOT_DIR/.claude-plugin/marketplace.json" >/dev/null 2>&1; echo $?)" "marketplace.json parses"
-  assert_eq "0" "$(jq -e . "$ROOT_DIR/.claude-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "claude plugin.json parses"
-  assert_eq "0" "$(jq -e . "$ROOT_DIR/plugins/erict-skills/.codex-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "codex plugin.json parses"
+  assert_eq "0" "$(jq -e . "$PLUGIN_MANIFEST" >/dev/null 2>&1; echo $?)" "claude plugin.json parses at marketplace-declared source"
+  assert_eq "0" "$(jq -e . "$ROOT_DIR/plugins/agent-loop/.codex-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "codex plugin.json parses"
+}
+
+test_plugin_manifest_lives_under_marketplace_source_not_repo_root() {
+  assert_eq "1" "$([ -f "$PLUGIN_MANIFEST" ] && printf 1 || printf 0)" "plugin.json exists at <marketplace source>/.claude-plugin/plugin.json"
+  assert_eq "1" "$([ ! -f "$ROOT_DIR/.claude-plugin/plugin.json" ] && printf 1 || printf 0)" "no dead plugin.json copy at repo root"
+}
+
+test_hook_commands_point_at_files_that_exist() {
+  local cmd path hookpath found
+  found=0
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    found=$((found + 1))
+    path="${cmd#*\"}"
+    path="${path%\"*}"
+    case "$path" in
+      '${CLAUDE_PLUGIN_ROOT}'*) hookpath="$PLUGIN_ROOT${path#\$\{CLAUDE_PLUGIN_ROOT\}}" ;;
+      *) hookpath="$path" ;;
+    esac
+    assert_eq "1" "$([ -f "$hookpath" ] && printf 1 || printf 0)" "hook command resolves to an existing file: $cmd"
+  done < <(jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' "$PLUGIN_MANIFEST" 2>/dev/null)
+  assert_eq "1" "$([ "$found" -gt 0 ] && printf 1 || printf 0)" "at least one hook command was found to check"
 }
 
 test_codex_manifest_points_at_shared_skills() {
-  assert_eq "./skills/" "$(jq -r '.skills' "$ROOT_DIR/plugins/erict-skills/.codex-plugin/plugin.json")" "codex reads shared skills dir"
+  assert_eq "./skills/" "$(jq -r '.skills' "$ROOT_DIR/plugins/agent-loop/.codex-plugin/plugin.json")" "codex reads shared skills dir"
 }
 
 test_every_skill_has_name_and_description() {
-  local f
-  for f in "$ROOT_DIR"/plugins/erict-skills/skills/*/SKILL.md; do
-    assert_eq "0" "$(head -1 "$f" | grep -c -- '---')" "$(basename "$(dirname "$f")") starts with frontmatter" 2>/dev/null || true
+  local f found
+  found=0
+  for f in "$ROOT_DIR"/plugins/agent-loop/skills/*/SKILL.md; do
+    [ -f "$f" ] || continue
+    found=$((found + 1))
+    assert_eq "1" "$(head -1 "$f" | grep -c -- '---')" "$(basename "$(dirname "$f")") starts with frontmatter"
     assert_contains "$(head -20 "$f")" "name:" "$(basename "$(dirname "$f")") declares name"
     assert_contains "$(head -20 "$f")" "description:" "$(basename "$(dirname "$f")") declares description"
   done
+  assert_eq "1" "$([ "$found" -gt 0 ] && printf 1 || printf 0)" "at least one SKILL.md was found"
 }
 
 test_git_guard_blocks_when_preflight_tool_missing() {
@@ -1606,14 +1828,14 @@ test_git_guard_blocks_when_preflight_tool_missing() {
   mkdir -p "$repo/.agent"
   printf '{"preflight":["definitely-not-a-real-tool"]}\n' > "$repo/.agent/config.json"
   assert_fails "guard blocks missing tool" \
-    bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"git merge x\"}}' | bash '$ROOT_DIR/plugins/erict-skills/hooks/git_guard.sh'"
+    bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"git merge x\"}}' | bash '$ROOT_DIR/plugins/agent-loop/hooks/git_guard.sh'"
 }
 
 test_git_guard_allows_non_git_commands() {
   local repo; repo="$(mktemp_repo)"
   mkdir -p "$repo/.agent"
   printf '{"preflight":["definitely-not-a-real-tool"]}\n' > "$repo/.agent/config.json"
-  bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"ls -la\"}}' | bash '$ROOT_DIR/plugins/erict-skills/hooks/git_guard.sh'"
+  bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"ls -la\"}}' | bash '$ROOT_DIR/plugins/agent-loop/hooks/git_guard.sh'"
   assert_eq "0" "$?" "non-git command passes through"
 }
 ```
@@ -1635,20 +1857,21 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {
-      "name": "erict-skills",
+      "name": "agent-loop",
       "description": "Durable session position and cross-engine review for any repository.",
-      "source": "./plugins/erict-skills",
+      "source": "./plugins/agent-loop",
       "category": "workflow"
     }
   ]
 }
 ```
 
-`.claude-plugin/plugin.json`:
+`plugins/agent-loop/.claude-plugin/plugin.json` (under the marketplace's
+declared `source`, not the repo root — see the note above):
 
 ```json
 {
-  "name": "erict-skills",
+  "name": "agent-loop",
   "description": "Durable session position, unattended plan execution, and cross-engine adversarial review.",
   "author": { "name": "Eric Tang" },
   "hooks": {
@@ -1680,11 +1903,11 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
 }
 ```
 
-`plugins/erict-skills/.codex-plugin/plugin.json`:
+`plugins/agent-loop/.codex-plugin/plugin.json`:
 
 ```json
 {
-  "name": "erict-skills",
+  "name": "agent-loop",
   "version": "0.1.0",
   "description": "Durable session position, unattended plan execution, and cross-engine adversarial review.",
   "author": { "name": "Eric Tang" },
@@ -1702,7 +1925,7 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
 }
 ```
 
-`plugins/erict-skills/hooks/session_start.sh`:
+`plugins/agent-loop/hooks/session_start.sh`:
 
 ```bash
 #!/bin/bash
@@ -1716,7 +1939,7 @@ cat "$state"
 exit 0
 ```
 
-`plugins/erict-skills/hooks/git_guard.sh`:
+`plugins/agent-loop/hooks/git_guard.sh`:
 
 ```bash
 #!/bin/bash
@@ -1752,7 +1975,7 @@ Expected: PASS — new packaging assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude-plugin/ plugins/erict-skills/.codex-plugin/ plugins/erict-skills/hooks/ tests/packaging_test.sh
+git add .claude-plugin/marketplace.json plugins/agent-loop/.claude-plugin/ plugins/agent-loop/.codex-plugin/ plugins/agent-loop/hooks/ tests/packaging_test.sh
 git commit -m "feat: package for both Claude Code and Codex"
 ```
 
@@ -1761,8 +1984,8 @@ git commit -m "feat: package for both Claude Code and Codex"
 ### Task 11: Findings schema and verdict reconciliation
 
 **Files:**
-- Create: `plugins/erict-skills/schema/findings.schema.json`
-- Create: `plugins/erict-skills/lib/adversarial.sh`
+- Create: `plugins/agent-loop/schema/findings.schema.json`
+- Create: `plugins/agent-loop/lib/adversarial.sh`
 - Create: `tests/reconcile_test.sh`
 
 **Interfaces:**
@@ -1777,8 +2000,8 @@ git commit -m "feat: package for both Claude Code and Codex"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/adversarial.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/adversarial.sh"
 
 _write_findings() {
   local path="$1"; shift
@@ -1833,7 +2056,7 @@ Expected: FAIL — `adversarial.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/schema/findings.schema.json`:
+`plugins/agent-loop/schema/findings.schema.json`:
 
 ```json
 {
@@ -1860,7 +2083,7 @@ Expected: FAIL — `adversarial.sh: No such file or directory`
 }
 ```
 
-`plugins/erict-skills/lib/adversarial.sh`:
+`plugins/agent-loop/lib/adversarial.sh`:
 
 ```bash
 #!/bin/bash
@@ -1873,8 +2096,14 @@ adv_key() {
 adv_reconcile() {
   local a="$1" b="$2"
   jq -n --slurpfile A "$a" --slurpfile B "$b" '
+    def require_fields:
+      if (type == "object")
+         and has("file") and has("line") and has("category") and has("refuted")
+      then .
+      else error("finding missing a required field (file, line, category, refuted): \(tojson)")
+      end;
     def key: "\(.file):\(.line):\(.category)";
-    ($A[0] // []) as $ca | ($B[0] // []) as $cb |
+    ($A[0] // [] | map(require_fields)) as $ca | ($B[0] // [] | map(require_fields)) as $cb |
     ($ca | map({ (key): . }) | add // {}) as $ma |
     ($cb | map({ (key): . }) | add // {}) as $mb |
     ($ma | keys) as $ka | ($mb | keys) as $kb |
@@ -1900,7 +2129,7 @@ Expected: PASS — 7 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/schema/findings.schema.json plugins/erict-skills/lib/adversarial.sh tests/reconcile_test.sh
+git add plugins/agent-loop/schema/findings.schema.json plugins/agent-loop/lib/adversarial.sh tests/reconcile_test.sh
 git commit -m "feat: reconcile cross-engine verdicts without averaging"
 ```
 
@@ -1909,7 +2138,7 @@ git commit -m "feat: reconcile cross-engine verdicts without averaging"
 ### Task 12: Counterpart-engine routing
 
 **Files:**
-- Modify: `plugins/erict-skills/lib/adversarial.sh` (append)
+- Modify: `plugins/agent-loop/lib/adversarial.sh` (append)
 - Create: `tests/routing_test.sh`
 
 **Interfaces:**
@@ -1925,8 +2154,8 @@ git commit -m "feat: reconcile cross-engine verdicts without averaging"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/adversarial.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/adversarial.sh"
 
 test_counterpart_of_claude_is_codex() {
   assert_eq "codex" "$(adv_counterpart claude)" "claude routes to codex"
@@ -1975,7 +2204,7 @@ Expected: FAIL — `adv_counterpart: command not found`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `plugins/erict-skills/lib/adversarial.sh`:
+Append to `plugins/agent-loop/lib/adversarial.sh`:
 
 ```bash
 # --- counterpart routing -----------------------------------------------------
@@ -1996,9 +2225,12 @@ adv_counterpart() {
 }
 
 adv_counterpart_bin() {
-  case "$(adv_counterpart "$1")" in
+  local other
+  other="$(adv_counterpart "$1")" || return 1
+  case "$other" in
     codex)  printf '%s' "$ADV_CODEX_BIN" ;;
     claude) printf '%s' "$ADV_CLAUDE_BIN" ;;
+    *)      return 1 ;;
   esac
 }
 
@@ -2014,16 +2246,20 @@ adv_check_counterpart() {
 }
 
 adv_counterpart_cmd() {
-  local self="$1" prompt_file="$2" out_file="$3" schema
+  local self="$1" prompt_file="$2" out_file="$3" schema other
   schema="$(cd "$(dirname "${BASH_SOURCE[0]}")/../schema" && pwd)/findings.schema.json"
-  case "$(adv_counterpart "$self")" in
+  other="$(adv_counterpart "$self")" || return 1
+  case "$other" in
     codex)
-      printf '%s exec -s read-only -C %s --output-schema %s -o %s - < %s' \
+      printf '%s exec -s read-only -C %q --output-schema %q -o %q - < %q' \
         "$ADV_CODEX_BIN" "${AGENT_REPO:-.}" "$schema" "$out_file" "$prompt_file"
       ;;
     claude)
-      printf '%s -p --output-format json < %s > %s' \
+      printf '%s -p --output-format json < %q > %q' \
         "$ADV_CLAUDE_BIN" "$prompt_file" "$out_file"
+      ;;
+    *)
+      return 1
       ;;
   esac
 }
@@ -2032,12 +2268,12 @@ adv_counterpart_cmd() {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `bash tests/run.sh`
-Expected: PASS — 8 new assertions green
+Expected: PASS — 11 new assertions green (original 8 plus 3 error-handling and path-quoting tests)
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/adversarial.sh tests/routing_test.sh
+git add plugins/agent-loop/lib/adversarial.sh tests/routing_test.sh
 git commit -m "feat: route adversarial review to the counterpart engine"
 ```
 
@@ -2046,10 +2282,10 @@ git commit -m "feat: route adversarial review to the counterpart engine"
 ### Task 13: The adversarial-review skill
 
 **Files:**
-- Create: `plugins/erict-skills/skills/adversarial-review/SKILL.md`
-- Create: `plugins/erict-skills/commands/adversarial.md`
-- Create: `plugins/erict-skills/agents/refuter.md`
-- Modify: `plugins/erict-skills/lib/env.sh` (source `adversarial.sh`)
+- Create: `plugins/agent-loop/skills/adversarial-review/SKILL.md`
+- Create: `plugins/agent-loop/commands/adversarial.md`
+- Create: `plugins/agent-loop/agents/refuter.md`
+- Modify: `plugins/agent-loop/lib/env.sh` (source `adversarial.sh`)
 - Modify: `tests/env_test.sh` (assert the new function is exposed)
 
 **Interfaces:**
@@ -2058,37 +2294,43 @@ git commit -m "feat: route adversarial review to the counterpart engine"
 
 - [ ] **Step 1: Write the failing test**
 
-Replace `test_erict_env_exposes_all_functions` in `tests/env_test.sh`:
+Replace `test_erict_env_exposes_all_functions` in `tests/env_test.sh`. Note:
+a later refactor deleted `state_write`, `plan_tick`, `slice_disjoint`, and
+`slice_module` — the brief originally named some of those; use this
+function list instead:
 
 ```bash
 test_erict_env_exposes_all_functions() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint adv_reconcile adv_counterpart | tr '\n' ' '")"
-  assert_eq "function function function function function function function function " "$out" "all modules sourced"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env claude; type -t cfg_get state_stamp gate_run vcs_can_commit portable_host adv_reconcile adv_counterpart | tr '\n' ' '")"
+  assert_eq "function function function function function function function " "$out" "all modules sourced"
 }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `bash tests/run.sh`
-Expected: FAIL — `adv_reconcile` reports empty instead of `function`
+Expected: FAIL — `adv_reconcile` and `adv_counterpart` report empty instead of
+`function`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add to `erict_env` in `plugins/erict-skills/lib/env.sh`, after the `slice.sh` line:
+Add to `erict_env` in `plugins/agent-loop/lib/env.sh`. There is no `slice.sh`
+line to anchor on — that module was removed in an earlier task — so add it
+as the last source line, after `vcs.sh`:
 
 ```bash
   . "$here/adversarial.sh"
 ```
 
-`plugins/erict-skills/agents/refuter.md`:
+`plugins/agent-loop/agents/refuter.md`:
 
 ```markdown
 ---
 name: refuter
 description: Adversarial reviewer that hunts for reasons work does NOT satisfy its stated criteria. Use only from the adversarial-review skill.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 ---
 
 You are a refuter, not an assessor. You are shown work and the criteria it
@@ -2102,11 +2344,27 @@ leading to a specific wrong outcome. "This could be fragile" is not a finding.
 "Calling advance() twice with the same timestamp double-awards the reward
 because the draw counter is not incremented on the second call" is a finding.
 
-Return a JSON array matching `schema/findings.schema.json`. Nothing else — no
-prose before or after.
+Return a JSON array. Your brief supplies the absolute path to
+`findings.schema.json` — validate against that path, not any relative
+reference. If the brief omits the path, or the file cannot be read, every
+finding must still carry exactly these seven fields: `file` (string), `line`
+(integer), `category` (one of `correctness`, `spec`, `invariant`, `security`,
+`test-gap`), `claim` (string), `evidence` (string), `severity` (one of
+`high`, `medium`, `low`), and `refuted` (boolean). Nothing else in the
+response — no prose before or after.
 ```
 
-`plugins/erict-skills/skills/adversarial-review/SKILL.md`:
+No `Bash` in `tools:` — a refuter receives the diff in its brief and needs to
+inspect files, not run commands. This is the only technical read-only
+enforcement on the Claude side; see "Both legs are read-only" below for what
+is and is not enforced on each leg.
+
+`plugins/agent-loop/skills/adversarial-review/SKILL.md`:
+
+The discovery snippet below is copied from `session-state/SKILL.md`'s current
+(post-portability-pass) version, which searches only `~/.claude/plugins
+~/.codex/plugins` — an earlier draft of this snippet included a third path
+(`~/Developer/erict-skills`) that was stale and has been dropped to match.
 
 ```markdown
 ---
@@ -2123,16 +2381,23 @@ description: >
 # Adversarial review
 
 ```bash
-ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
-  -path '*erict-skills*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$ERICT_LIB" ] || { echo "erict-skills lib not found"; exit 1; }
-. "$ERICT_LIB/env.sh" && erict_env claude   # or: erict_env codex
+AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
+  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
+[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
+. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
 adv_check_counterpart "$AGENT_ENGINE" || exit 1
 ```
 
 **Never proceed when `adv_check_counterpart` fails.** A single-engine review
 wearing this command's name is worse than no review, because it claims a
 confidence it did not earn.
+
+**Engine identity is always passed explicitly, never sniffed.** `AGENT_ENGINE`
+comes only from the `erict_env claude` / `erict_env codex` call above, and
+both `adv_check_counterpart` and `adv_counterpart_cmd` take it as an
+argument. An engine that inferred its own identity from the environment
+could end up reviewing its own work by accident; passing it explicitly
+guarantees the counterpart is always the other engine.
 
 ## 1. Assemble the brief
 
@@ -2141,6 +2406,9 @@ confidence it did not earn.
   whole plan when it declares none.
 - Rules: `$(cfg_get review.rules '.agent/rules.md')`, falling back to
   `AGENTS.md`, then `CLAUDE.md`.
+- Schema: `$AGENT_LOOP_LIB/../schema/findings.schema.json` — interpolate this
+  absolute path into the brief text. A bare relative path does not resolve
+  once the reviewer's working directory is the target repo, not the plugin.
 
 Write the brief to a temp file. Both legs receive the same brief.
 
@@ -2149,13 +2417,25 @@ Write the brief to a temp file. Both legs receive the same brief.
 Instruct both to **refute, not assess**: "this work claims to satisfy the
 following criteria — find why it does not."
 
-- **This engine's leg** — dispatch the `refuter` agent with the invariant and
-  rule-violation lens.
+- **This engine's leg:**
+  - **Under Claude**, dispatch the `refuter` subagent (`agents/refuter.md`)
+    with the brief, using the invariant and rule-violation lens.
+  - **Under Codex**, no subagent mechanism exists —
+    `.codex-plugin/plugin.json` declares only `skills`, not `agents`. The
+    host agent performs the refutation itself, following
+    `agents/refuter.md`'s instructions inline against the same brief, and
+    produces the same output contract.
 - **The counterpart leg** — run `adv_counterpart_cmd "$AGENT_ENGINE" <prompt> <out>`
   with the exit-gate-skeptic lens: does this satisfy the criteria, or merely
   satisfy the tests?
 
-Both legs run read-only. Neither may edit the working tree.
+Both legs are read-only, but not enforced identically. The Codex counterpart
+is sandboxed read-only by `-s read-only`. The Claude-side legs — the local
+`refuter` subagent and the `claude -p` counterpart — have no equivalent
+sandbox flag; they are constrained by tool restriction
+(`agents/refuter.md` grants `Read, Grep, Glob` only, never `Bash`) and by
+instruction, not by a technical sandbox. Neither leg may edit the working
+tree regardless of engine.
 
 ## 3. Reconcile
 
@@ -2177,7 +2457,7 @@ exactly the signal the second engine was bought for.
 Do not fix anything. This command reports; the user decides.
 ```
 
-`plugins/erict-skills/commands/adversarial.md`:
+`plugins/agent-loop/commands/adversarial.md`:
 
 ```markdown
 ---
@@ -2197,7 +2477,7 @@ Expected: PASS — all assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/skills/adversarial-review/ plugins/erict-skills/commands/adversarial.md plugins/erict-skills/agents/refuter.md plugins/erict-skills/lib/env.sh tests/env_test.sh
+git add plugins/agent-loop/skills/adversarial-review/ plugins/agent-loop/commands/adversarial.md plugins/agent-loop/agents/refuter.md plugins/agent-loop/lib/env.sh tests/env_test.sh
 git commit -m "feat: add the cross-engine adversarial review skill"
 ```
 
@@ -2238,11 +2518,11 @@ Expected: PASS — every assertion from Tasks 1–13 green. Do not install a fai
 ```bash
 # Claude Code
 claude plugin marketplace add ~/Developer/erict-skills
-claude plugin install erict-skills@erict
+claude plugin install agent-loop@erict
 
 # Codex
 codex plugin marketplace add ~/Developer/erict-skills
-codex plugin add erict-skills
+codex plugin add agent-loop
 ```
 
 Record the exact commands that worked in `docs/development/installing.md`, along with a `README.md` covering what the pack does, the `.agent/config.json` keys, and the two non-configurable safety rules.
@@ -2406,7 +2686,7 @@ In `~/Developer/idle-rpg-mobile`:
 ```bash
 git checkout -b chore/agent-config
 git add .agent/config.json .agent/rules.md .gitignore
-git commit -m "chore: configure erict-skills agent workflow"
+git commit -m "chore: configure agent-loop agent workflow"
 ```
 
 Add a pointer under **Where things are** in `AGENTS.md`:
@@ -2418,6 +2698,683 @@ Add a pointer under **Where things are** in `AGENTS.md`:
 ```bash
 git add AGENTS.md
 git commit -m "docs: point AGENTS.md at the agent loop configuration"
+```
+
+---
+
+### Task 16: Cross-platform portability and environment preflight
+
+> **Execution order:** run this immediately after Task 9 and before Task 10. It
+> changes `lib/*.sh` that Tasks 11 and 12 build on. Numbered 16 only to avoid
+> renumbering briefs already generated for Tasks 10–15.
+
+**Files:**
+- Create: `plugins/agent-loop/lib/portable.sh`
+- Create: `.gitattributes`
+- Create: `tests/portable_test.sh`
+- Modify: `plugins/agent-loop/lib/detect.sh` (replace both `stat -f %m` calls)
+- Modify: `plugins/agent-loop/lib/state.sh` (hostname in the lock)
+- Modify: `plugins/agent-loop/lib/env.sh` (source `portable.sh` first, run the dependency check)
+- Modify: `plugins/agent-loop/skills/session-state/SKILL.md` (drop the machine-specific discovery path)
+- Modify: `plugins/agent-loop/lib/plan.sh` (wire `portable_strip_cr` into `plan_next_text` —
+  this is `portable_strip_cr`'s one production call site; without it the helper
+  is defined and unit-tested but never actually used)
+- Modify: `tests/plan_test.sh` (source `portable.sh`; add CRLF regression tests)
+
+**Interfaces:**
+- Consumes: everything from Tasks 1–9
+- Produces:
+  - `portable_mtime <file>` — echoes the file's modification time as a Unix
+    epoch integer on GNU, BSD, and Git Bash. Returns 1 and prints to stderr when
+    no supported `stat` exists, rather than echoing a silent `0`.
+  - `portable_require` — verifies `jq`, `git`, and `awk` are on `PATH`. Returns 1
+    naming every missing tool. **Must not use `jq`**, since `jq` is one of the
+    tools it checks.
+  - `portable_host` — echoes a stable machine identifier.
+  - `portable_strip_cr <file>` — echoes the file's contents with trailing
+    carriage returns removed, for CRLF-checked-out plans.
+
+**Scope note:** "Windows" here means Git Bash or WSL, not PowerShell or `cmd`.
+The pack is bash; that is the honest boundary and the README must say so.
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/portable_test.sh`:
+
+```bash
+#!/bin/bash
+. "$AGENT_LOOP_LIB/portable.sh"
+
+test_portable_mtime_returns_an_epoch_integer() {
+  local repo f now
+  repo="$(mktemp_repo)"
+  f="$repo/README.md"
+  now="$(portable_mtime "$f")"
+  assert_eq "1" "$(printf '%s' "$now" | grep -cE '^[0-9]+$')" "mtime is an integer"
+  assert_eq "1" "$([ "$now" -gt 1000000000 ] && printf 1 || printf 0)" "mtime is a plausible epoch"
+}
+
+test_portable_mtime_orders_two_files() {
+  local repo older newer
+  repo="$(mktemp_repo)"
+  older="$repo/older.md"
+  newer="$repo/newer.md"
+  printf 'a\n' > "$older"
+  sleep 1
+  printf 'b\n' > "$newer"
+  assert_eq "1" "$([ "$(portable_mtime "$newer")" -gt "$(portable_mtime "$older")" ] && printf 1 || printf 0)" \
+    "newer file has a greater mtime"
+}
+
+test_portable_mtime_fails_loudly_on_a_missing_file() {
+  assert_fails "missing file is an error" portable_mtime /nonexistent/path/xyz
+}
+
+test_portable_require_passes_when_tools_present() {
+  portable_require
+  assert_eq "0" "$?" "jq, git and awk are present in this environment"
+}
+
+test_portable_require_names_a_missing_tool() {
+  local out
+  out="$(PATH=/nonexistent portable_require 2>&1 || true)"
+  assert_contains "$out" "jq" "names jq when PATH is empty"
+}
+
+test_portable_host_is_non_empty_and_stable() {
+  local a b
+  a="$(portable_host)"
+  b="$(portable_host)"
+  assert_eq "$a" "$b" "hostname is stable across calls"
+  assert_eq "0" "$([ -z "$a" ] && printf 0 || printf 1)" "hostname is non-empty" 2>/dev/null
+  assert_eq "1" "$([ -n "$a" ] && printf 1 || printf 0)" "hostname is non-empty"
+}
+
+test_portable_strip_cr_removes_carriage_returns() {
+  local repo f
+  repo="$(mktemp_repo)"
+  f="$repo/crlf.md"
+  printf -- '- [ ] first\r\n- [ ] second\r\n' > "$f"
+  assert_eq "0" "$(portable_strip_cr "$f" | grep -c $'\r')" "no carriage returns remain"
+  assert_eq "2" "$(portable_strip_cr "$f" | grep -c 'first\|second')" "content survives"
+}
+
+test_state_lock_ignores_a_pid_from_another_host() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  state_write "p.md" 1 2 "b" "c" "s" "none" ""
+  awk -v pid="$$" '{
+    sub(/^engine: claude$/, "engine: codex")
+    sub(/^pid: .*$/, "pid: " pid)
+    sub(/^host: .*$/, "host: some-other-machine")
+    print
+  }' "$(state_path)" > "$(state_path).tmp" && mv "$(state_path).tmp" "$(state_path)"
+  assert_fails "a live pid on another host is not proof of liveness" state_lock_ok
+}
+
+test_state_records_this_host() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  state_write "p.md" 1 2 "b" "c" "s" "none" ""
+  assert_eq "$(portable_host)" "$(state_get host)" "host round-trips"
+}
+
+test_detect_plan_still_picks_the_newest() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/docs/plans"
+  printf -- '- [ ] old\n' > "$AGENT_REPO/docs/plans/a.md"
+  sleep 1
+  printf -- '- [ ] new\n' > "$AGENT_REPO/docs/plans/b.md"
+  assert_eq "$AGENT_REPO/docs/plans/b.md" "$(detect_plan)" "newest plan still wins after the mtime change"
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `bash tests/run.sh`
+Expected: FAIL — `portable.sh: No such file or directory`
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plugins/agent-loop/lib/portable.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Cross-platform helpers. Targets GNU (Linux, Git Bash), BSD (macOS), and WSL.
+# Every helper fails loudly rather than returning a plausible wrong answer.
+
+portable_mtime() {
+  local file="$1" out
+  if [ ! -e "$file" ]; then
+    printf 'portable_mtime: no such file: %s\n' "$file" >&2
+    return 1
+  fi
+  out="$(stat -c %Y "$file" 2>/dev/null)" && { printf '%s' "$out"; return 0; }
+  out="$(stat -f %m "$file" 2>/dev/null)" && { printf '%s' "$out"; return 0; }
+  printf 'portable_mtime: neither GNU nor BSD stat is available\n' >&2
+  return 1
+}
+
+portable_require() {
+  local tool missing
+  missing=""
+  for tool in jq git awk; do
+    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+  done
+  if [ -n "$missing" ]; then
+    printf 'agent-loop requires these tools on PATH, and they are missing:%s\n' "$missing" >&2
+    printf 'On macOS: brew install jq. On Debian/Ubuntu: apt-get install jq.\n' >&2
+    printf 'On Windows use Git Bash or WSL; PowerShell and cmd are not supported.\n' >&2
+    return 1
+  fi
+  return 0
+}
+
+portable_host() {
+  local h
+  h="${HOSTNAME:-}"
+  [ -n "$h" ] || h="$(hostname 2>/dev/null)"
+  [ -n "$h" ] || h="$(uname -n 2>/dev/null)"
+  [ -n "$h" ] || h="unknown-host"
+  printf '%s' "$h"
+}
+
+portable_strip_cr() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  awk '{ sub(/\r$/, ""); print }' "$file"
+}
+```
+
+`.gitattributes` at the repository root — without this, a Windows checkout with
+`core.autocrlf=true` gives every `.sh` file carriage returns and bash dies with
+`$'\r': command not found`:
+
+```gitattributes
+*.sh text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+```
+
+In `plugins/agent-loop/lib/detect.sh`, replace both occurrences of
+
+```bash
+mtime="$(stat -f %m "$f" 2>/dev/null || echo 0)"
+```
+
+with
+
+```bash
+mtime="$(portable_mtime "$f" 2>/dev/null)" || mtime=0
+```
+
+(the first occurrence uses `"$repo/$f"`; keep its path expression unchanged).
+
+In `plugins/agent-loop/lib/state.sh`, add `host` to the frontmatter written by
+`state_write`, immediately after the `engine` line:
+
+```bash
+    printf 'host: %s\n' "$(portable_host)"
+```
+
+and gate the liveness check in `state_lock_ok` on the host matching, since a pid
+from another machine proves nothing:
+
+```bash
+  holder_host="$(state_get host)"
+  if [ -n "$holder_host" ] && [ "$holder_host" != "$(portable_host)" ]; then
+    printf 'refusing: %s holds %s from host %s; liveness cannot be checked across machines\n' \
+      "$holder" "$file" "$holder_host" >&2
+    return 1
+  fi
+```
+
+Place that block after the same-engine early return and before the `kill -0`
+check, so a different engine holding the file from another host refuses rather
+than testing a meaningless local pid. This is what makes the lock correct on a
+cloud-synced worktree.
+
+In `plugins/agent-loop/lib/env.sh`, source `portable.sh` **first** and run the
+dependency check before anything else can call `cfg_get`:
+
+```bash
+  . "$here/portable.sh"
+  portable_require || return 1
+```
+
+In `plugins/agent-loop/skills/session-state/SKILL.md`, drop
+`~/Developer/erict-skills` from the discovery `find`, leaving `~/.claude/plugins`
+and `~/.codex/plugins`. A developer working from a local checkout can export
+`AGENT_LOOP_LIB` themselves; a machine-specific path does not belong in a
+distributable pack.
+
+`portable_strip_cr` needs a caller, or the CRLF capability this task claims
+does not exist. `plan_next_text` is the one reader whose output escapes into
+another file: the session-state skill records it verbatim into
+`.agent/state.md`'s `next_step` field, so a trailing `\r` from a
+CRLF-checked-out plan would ride straight into the cursor file. In
+`plugins/agent-loop/lib/plan.sh`, read the plan through `portable_strip_cr`
+before extracting the line:
+
+```bash
+plan_next_text() {
+  local plan="$1" line
+  line="$(plan_next_line "$plan")"
+  [ -n "$line" ] || return 0
+  portable_strip_cr "$plan" | awk -v ln="$line" 'NR == ln {
+    sub(/^[[:space:]]*- \[ \][[:space:]]*/, "")
+    print
+    exit
+  }'
+}
+```
+
+This creates an ordering dependency: `plan.sh` now needs `portable.sh` sourced
+first. `env.sh` already sources `portable.sh` before everything else, so this
+holds at runtime; `tests/plan_test.sh` needs `. "$AGENT_LOOP_LIB/portable.sh"`
+added alongside its existing `config.sh`/`plan.sh` sourcing for the same
+reason.
+
+Leave `plan_next_line`, `plan_counts`, and `_detect_has_open_task` alone —
+their regexes are unanchored at end-of-line, so a trailing `\r` never affects
+matching or counting. Add a test proving that claim rather than assuming it,
+using a CRLF fixture written with an explicit
+`printf -- '...\r\n...\r\n'` (not dependent on git's checkout behavior).
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `bash tests/run.sh`
+Expected: PASS — tally grows, `0 failed`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add plugins/agent-loop/lib/portable.sh plugins/agent-loop/lib/detect.sh \
+  plugins/agent-loop/lib/state.sh plugins/agent-loop/lib/env.sh \
+  plugins/agent-loop/lib/plan.sh \
+  plugins/agent-loop/skills/session-state/SKILL.md .gitattributes \
+  tests/portable_test.sh tests/plan_test.sh
+git commit -m "feat: make the pack portable across macOS, Linux, Git Bash, and synced folders"
+```
+
+---
+
+### Task 17: Rebalance to a thin core
+
+> **Execution order:** run after Task 16 and before Task 10.
+
+**Why:** the pack reached 484 lines of shell against 155 of prose, and every
+Critical and Important code defect in this build came from that shell. Three
+modules earn their weight — `gate.sh` (picks the narrowest proving gate, saving
+real minutes on an expensive suite), `vcs.sh` (encodes the detached-HEAD and
+non-standard-default-branch cases a model infers wrong), and the read-only plan
+helpers (three greps instead of loading a 2,700-line plan into context each
+`/status`). The rest is cheaper and safer as prose.
+
+**Files:**
+- Delete: `plugins/agent-loop/lib/slice.sh`, `tests/slice_test.sh`
+- Modify: `plugins/agent-loop/lib/plan.sh` (remove `plan_tick`)
+- Modify: `plugins/agent-loop/lib/state.sh` (replace `state_write` with `state_stamp`)
+- Modify: `plugins/agent-loop/lib/env.sh` (stop sourcing `slice.sh`)
+- Modify: `plugins/agent-loop/skills/session-state/SKILL.md` (prose replaces the removed calls)
+- Modify: `tests/plan_test.sh`, `tests/state_test.sh`, `tests/env_test.sh`, `tests/portable_test.sh`
+
+**Interfaces:**
+- Removed: `plan_tick`, `state_write`, `slice_module`, `slice_disjoint`
+- Retained unchanged: `cfg_get`, `cfg_file`, `detect_plan`, `detect_gate`,
+  `state_path`, `state_get`, `state_section`, `state_lock_ok`, `plan_next_line`,
+  `plan_next_text`, `plan_counts`, `plan_bootstrap`, `gate_rank`,
+  `gate_level_for`, `gate_run`, all `vcs_*`, all `portable_*`
+- Produces: `state_stamp` — echoes the machine-derived frontmatter fields as
+  `key: value` lines (`branch`, `last_green`, `engine`, `pid`, `host`,
+  `updated`). It writes no file. The model composes `.agent/state.md` itself,
+  substituting these lines into the template in `SKILL.md`.
+
+`state_stamp` exists because those six values are machine facts a model cannot
+read off, while the plan pointer and the three prose sections are things a model
+already holds. Splitting on that line removes the 8-positional-argument trap that
+produced this build's Task 9 defect, without asking the model to guess a pid.
+
+- [ ] **Step 1: Write the failing test**
+
+Replace `test_state_round_trip` and the capping tests in `tests/state_test.sh`
+with tests against the new surface, and add to `tests/plan_test.sh`:
+
+```bash
+test_state_stamp_emits_machine_fields() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  local out
+  out="$(cd "$AGENT_REPO" && state_stamp)"
+  assert_contains "$out" "branch: main" "branch present"
+  assert_contains "$out" "engine: claude" "engine present"
+  assert_contains "$out" "host: $(portable_host)" "host present"
+  assert_eq "1" "$(printf '%s\n' "$out" | grep -cE '^pid: [0-9]+$')" "pid is numeric"
+  assert_eq "1" "$(printf '%s\n' "$out" | grep -cE '^updated: [0-9]{4}-')" "updated is a timestamp"
+}
+
+test_state_stamp_writes_no_file() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  ( cd "$AGENT_REPO" && state_stamp ) >/dev/null
+  assert_eq "0" "$([ -f "$(state_path)" ] && printf 1 || printf 0)" "state_stamp does not write"
+}
+
+test_state_get_still_reads_a_model_written_file() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  mkdir -p "$AGENT_REPO/.agent"
+  printf -- '---\nplan: docs/p.md\ntask: 4\nhost: %s\nengine: claude\npid: %s\n---\n\n## Next concrete step\nDo the thing\n' \
+    "$(portable_host)" "$$" > "$(state_path)"
+  assert_eq "docs/p.md" "$(state_get plan)" "reads a hand-written cursor"
+  assert_eq "Do the thing" "$(state_section 'Next concrete step')" "reads a hand-written section"
+  state_lock_ok
+  assert_eq "0" "$?" "same engine and host is unlocked"
+}
+
+test_plan_tick_is_gone() {
+  assert_eq "" "$(type -t plan_tick)" "plan_tick removed"
+}
+
+test_slice_functions_are_gone() {
+  assert_eq "" "$(type -t slice_disjoint)" "slice_disjoint removed"
+  assert_eq "" "$(type -t slice_module)" "slice_module removed"
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `bash tests/run.sh`
+Expected: FAIL — `state_stamp: command not found`, and the `_gone` tests fail
+because the functions still exist.
+
+- [ ] **Step 3: Write minimal implementation**
+
+Replace `state_write` in `plugins/agent-loop/lib/state.sh` with:
+
+```bash
+state_stamp() {
+  printf 'branch: %s\n' "$(vcs_current_branch)"
+  printf 'last_green: %s\n' "$(git -C "${AGENT_REPO:-.}" rev-parse --short HEAD 2>/dev/null)"
+  printf 'engine: %s\n' "${AGENT_ENGINE:-unknown}"
+  printf 'pid: %s\n' "$$"
+  printf 'host: %s\n' "$(portable_host)"
+  printf 'updated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+```
+
+Delete `plan_tick` from `plan.sh`, delete `lib/slice.sh` and `tests/slice_test.sh`,
+and remove the `slice.sh` source line from `env.sh`.
+
+Keep `STATE_NOTES_MAX` as a documented convention in `SKILL.md` rather than code:
+the model caps its own notes at 40 lines when composing the file.
+
+- [ ] **Step 4: Rewrite the affected `SKILL.md` procedures**
+
+In `/next` step 6, replace the `state_write` invocation with: run `state_stamp`,
+then use the Write tool to compose `.agent/state.md` from this template,
+substituting the stamped lines verbatim and filling `plan`, `task`, and
+`total_tasks` yourself. Show the full template, including the three body
+sections, and state the 40-line notes cap and that the newest lines are kept.
+
+Replace `plan_tick` with: edit the plan file directly, changing that task's
+`- [ ]` to `- [x]`. Say to match the exact line and leave surrounding text alone.
+
+In `/handoff parallel`, replace `slice_disjoint` with a prose instruction: list
+the files the current work touches and the files the candidate slice touches,
+map each to its module using the `modules` config when present or the first two
+path components otherwise, and refuse when the two sets share a module. Preserve
+the refusal rule verbatim — **refuse rather than guess** — and say the refusal
+must name the shared module.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `bash tests/run.sh`
+Expected: PASS — `0 failed`. Report the true before and after tallies; the total
+will **drop**, since `tests/slice_test.sh` is deleted. A falling tally is correct
+here and must not be papered over.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git rm plugins/agent-loop/lib/slice.sh tests/slice_test.sh
+git add -A
+git commit -m "refactor: keep shell for gates, vcs and plan reads; move the rest to prose"
+```
+
+---
+
+### Task 18: Stateless entry point
+
+**Why:** installing the pack for real, after Task 17 shipped `148 passed, 0
+failed`, surfaced a critical architectural defect that no fixture caught.
+An agent's Bash tool calls do not share shell state — each call is a fresh
+process. A variable set, or a function sourced, in one call is gone in the
+next. Both `SKILL.md` files were written on the opposite assumption: they
+sourced `env.sh` once in a preamble and then called `detect_plan`,
+`plan_counts`, `state_get`, `gate_run`, `vcs_can_commit`, `adv_reconcile`,
+and others as though those functions stayed in scope afterward. In real use
+every one of them fails with `command not found`; `/status` breaks on its
+first invocation, in both engines. `tests/run.sh` never caught this because
+it sources every module into one long-lived shell — the harness's own
+convenience is exactly the situation that does not hold at runtime.
+
+A second, sharper-edged defect rode along: `env.sh` resolved its own
+directory with `${BASH_SOURCE[0]}`, which is empty under zsh — the shell the
+pack's owner runs. `dirname ""` is `.`, so `here` silently became the
+*current working directory* instead of the lib directory, and the very
+first source line failed: `no such file or directory: .../portable.sh`. Not
+sourcing under bash explicitly hid this in every manual check.
+
+**Files:**
+- Create: `plugins/agent-loop/bin/agent-loop`
+- Create: `tests/entry_test.sh`
+- Modify: `plugins/agent-loop/lib/env.sh` (resolve its own directory correctly under zsh)
+- Modify: `plugins/agent-loop/skills/session-state/SKILL.md` (discovery preamble; every library call rewritten)
+- Modify: `plugins/agent-loop/skills/adversarial-review/SKILL.md` (discovery preamble; every library call rewritten)
+- Modify: `plugins/agent-loop/commands/*.md` (six files: drop the stale `erict_env claude` instruction)
+
+**Interfaces:**
+- Consumes: `erict_env` and every `lib/*.sh` function from Tasks 1–17
+- Produces: `bin/agent-loop <claude|codex> <function> [args...]` — a single
+  executable that re-sources the whole library from a **fresh process on
+  every call**, exits non-zero exactly when the wrapped function does, and
+  passes stdout through unchanged so `$(agent-loop claude plan_counts
+  "$plan")` behaves like calling the function directly in a persistent
+  shell would. An unrecognized engine, a missing engine, a missing function
+  name, or an unrecognized function name all fail loudly (exit 2) rather
+  than falling through to a default or to the shell's own command lookup.
+
+- [ ] **Step 1: Write the failing test**
+
+`tests/entry_test.sh` (excerpt — the full file also covers a different
+working directory, an unknown-engine rejection, and a failure-message
+pass-through; see the committed file for all of it):
+
+```bash
+#!/bin/bash
+AGENT_LOOP_BIN="$(cd "$AGENT_LOOP_LIB/../bin" && pwd)/agent-loop"
+
+test_wrapper_runs_a_function_from_a_fresh_process() {
+  local plan out
+  plan="$(_entry_fixture_plan)"
+  out="$("$AGENT_LOOP_BIN" claude plan_counts "$plan")"
+  assert_eq "1 3" "$out" "wrapper's plan_counts matches a direct call, from a fresh process"
+}
+
+test_wrapper_works_when_the_calling_shell_is_zsh() {
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf '  SKIP: zsh not available on this machine\n' >&2
+    return 0
+  fi
+  local plan out
+  plan="$(_entry_fixture_plan)"
+  out="$(zsh -c "bash '$AGENT_LOOP_BIN' claude plan_counts '$plan'")"
+  assert_eq "1 3" "$out" "zsh caller invoking the bash wrapper still gets the right answer"
+}
+
+test_sourcing_env_sh_directly_under_zsh_now_succeeds() {
+  if ! command -v zsh >/dev/null 2>&1; then
+    printf '  SKIP: zsh not available on this machine\n' >&2
+    return 0
+  fi
+  local repo out
+  repo="$(mktemp_repo)"
+  out="$(cd "$repo" && zsh -c ". '$AGENT_LOOP_LIB/env.sh' && erict_env claude && printf 'engine=%s repo=%s' \"\$AGENT_ENGINE\" \"\$AGENT_REPO\"" 2>&1)"
+  assert_contains "$out" "engine=claude" "erict_env succeeded under zsh"
+}
+
+test_wrapper_rejects_an_unknown_engine() {
+  local plan; plan="$(_entry_fixture_plan)"
+  assert_fails "unknown engine fails loudly rather than defaulting" \
+    "$AGENT_LOOP_BIN" gemini plan_counts "$plan"
+}
+
+test_wrapper_propagates_a_nonzero_exit_from_the_underlying_function() {
+  local repo; repo="$(mktemp_repo)"
+  assert_fails "vcs_can_commit's refusal on main propagates through the wrapper" \
+    bash -c "cd '$repo' && '$AGENT_LOOP_BIN' claude vcs_can_commit"
+}
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `bash tests/run.sh`
+Expected: FAIL — `agent-loop: No such file or directory`, and the
+direct-zsh-sourcing test fails with `no such file or directory:
+.../portable.sh`.
+
+- [ ] **Step 3: Write minimal implementation**
+
+`plugins/agent-loop/bin/agent-loop` (`chmod +x`):
+
+```bash
+#!/usr/bin/env bash
+# Self-contained entry point for the agent-loop library.
+#
+# An agent's Bash tool calls do NOT share shell state: each call is a fresh
+# process, so a variable set or a function sourced in one call is gone in
+# the next. This wrapper re-sources the whole library on every invocation.
+set -u
+
+usage() {
+  printf 'usage: %s <claude|codex> <function> [args...]\n' "$(basename "$0")" >&2
+}
+
+lib="$(cd "$(dirname "$0")/../lib" && pwd)"
+. "$lib/env.sh"
+
+engine="${1:-}"
+case "$engine" in
+  claude|codex) ;;
+  "")
+    printf 'agent-loop: missing engine argument\n' >&2
+    usage; exit 2 ;;
+  *)
+    printf 'agent-loop: unknown engine: %s (expected claude or codex)\n' "$engine" >&2
+    usage; exit 2 ;;
+esac
+shift
+
+fn="${1:-}"
+if [ -z "$fn" ]; then
+  printf 'agent-loop: missing function name\n' >&2
+  usage; exit 2
+fi
+shift
+
+erict_env "$engine" || exit 1
+
+if [ "$(type -t "$fn" 2>/dev/null)" != "function" ]; then
+  printf 'agent-loop: unknown library function: %s\n' "$fn" >&2
+  exit 2
+fi
+
+"$fn" "$@"
+```
+
+In `plugins/agent-loop/lib/env.sh`, `${BASH_SOURCE[0]}` is empty under zsh —
+but the fix cannot simply be `${BASH_SOURCE[0]:-$0}` read *inside*
+`erict_env`, because zsh resets `$0` to a function's own name the instant
+that function starts running (`FUNCTION_ARGZERO`, on by default); by the
+time `erict_env` runs, `$0` is `erict_env`, not the path to `env.sh`. The
+fix has to capture the directory **before** any function runs — at the top
+level of the file, in the moment it is sourced, which is the one point
+where bash's `BASH_SOURCE[0]` and zsh's `$0` both still correctly hold the
+file's own path:
+
+```bash
+_erict_env_lib_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
+erict_env() {
+  local engine="${1:-unknown}" here="$_erict_env_lib_dir"
+  AGENT_ENGINE="$engine"
+  . "$here/portable.sh"
+  portable_require || return 1
+  ...
+}
+```
+
+- [ ] **Step 4: Rewrite both `SKILL.md` procedures**
+
+Replace the source-once preamble in
+`plugins/agent-loop/skills/session-state/SKILL.md` and
+`plugins/agent-loop/skills/adversarial-review/SKILL.md` with a discovery
+step that finds `bin/agent-loop` once:
+
+```bash
+find ~/.claude/plugins ~/.codex/plugins -path '*agent-loop*' -name agent-loop -type f -perm -u+x 2>/dev/null
+```
+
+State plainly why: every Bash call is a fresh process, so nothing may rely
+on a prior source *or* on a shell variable surviving to the next command —
+`AGENT_LOOP_BIN="..."` set in one call is exactly as gone in the next call
+as a sourced function would be. Instruct the agent to treat the discovered
+path as literal text substituted into every later command
+(`` `<agent-loop>` `` in the prose), never as a variable reference.
+
+Convert every bare function reference into `<agent-loop> <engine>
+<function> [args...]`. Session-state: `detect_plan` (×4, across `/plan`,
+`/status`, `/next`, `/auto`), `plan_bootstrap`, `state_get`, `plan_counts`,
+`plan_next_text`, `plan_next_line` (×3), `cfg_get human_gate.glob` /
+`cfg_get human_gate.marker`, `state_lock_ok`, `vcs_preflight`,
+`gate_level_for`, `gate_run` (×2, including the `cfg_get
+gate_policy.halt_requires full` it used to receive as a nested substitution
+— now two sequential calls), `vcs_commit`, `state_stamp` (×2), `state_get` /
+`state_section` (read-back), `detect_gate suite`, `cfg_get
+vcs.branch_prefix agent/`, `cfg_get vcs.worktree_root .worktrees`.
+Adversarial-review: `adv_check_counterpart`, `vcs_default_branch`,
+`state_get plan`, `cfg_get review.rules`, `adv_counterpart_cmd`,
+`adv_reconcile`. Preserve every existing rule's wording exactly — the two
+non-configurable safety rules, refute-not-assess, the three reconciliation
+buckets, never-average, `--self`/explicit-identity routing and its
+rationale, loud failure on a missing counterpart, `/auto` bootstrapping a
+plan then stopping while `/next` continues, `/handoff parallel` refusing
+rather than guessing, and the read-only wording distinguishing Codex's
+sandbox flag from Claude-side instruction-only enforcement — only the call
+syntax changes.
+
+Update the six `plugins/agent-loop/commands/*.md` shims: each said "Call
+`erict_env claude`", which no longer means anything the agent can execute.
+Replace with a pointer at the skill's own discovery procedure instead of
+re-describing it.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `bash tests/run.sh`
+Expected: PASS — tally grows from `148 passed, 0 failed` to `157 passed, 0
+failed`. Reverting only the `env.sh` fix reproduces `156 passed, 1 failed`,
+confirming `tests/entry_test.sh` actually exercises the zsh defect rather
+than passing vacuously.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add plugins/agent-loop/bin/agent-loop plugins/agent-loop/lib/env.sh \
+  plugins/agent-loop/skills/session-state/SKILL.md \
+  plugins/agent-loop/skills/adversarial-review/SKILL.md \
+  plugins/agent-loop/commands tests/entry_test.sh
+git commit -m "fix: make every library invocation self-contained across fresh processes and zsh"
 ```
 
 ---
