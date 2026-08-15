@@ -652,8 +652,13 @@ state_section() {
   awk -v h="## $name" '
     $0 == h { grab = 1; next }
     grab && /^## / { exit }
-    grab { print }
-  ' "$file" | awk 'NF { blank = 0; buf = buf sep $0; sep = "\n" } END { print buf }'
+    grab { lines[n++] = $0 }
+    END {
+      last = -1
+      for (i = 0; i < n; i++) if (lines[i] ~ /[^[:space:]]/) last = i
+      for (i = 0; i <= last; i++) print lines[i]
+    }
+  ' "$file"
 }
 
 state_lock_ok() {
@@ -679,7 +684,28 @@ state_write() {
   file="$(state_path)"
   dir="$(dirname "$file")"
   mkdir -p "$dir"
-  capped="$(printf '%s\n' "$notes" | grep -v '^$' | tail -n "$STATE_NOTES_MAX")"
+  capped="$(printf '%s\n' "$notes" | awk '
+    { lines[n++] = $0 }
+    END {
+      first = -1
+      last = -1
+      for (i = 0; i < n; i++) {
+        if (lines[i] ~ /[^[:space:]]/) {
+          if (first == -1) first = i
+          last = i
+        }
+      }
+      if (first >= 0) {
+        trimmed_n = last - first + 1
+        if (trimmed_n > '"$STATE_NOTES_MAX"') {
+          start = trimmed_n - '"$STATE_NOTES_MAX"'
+        } else {
+          start = 0
+        }
+        for (i = start; i <= last - first; i++) print lines[first + i]
+      }
+    }
+  ')"
   {
     printf -- '---\n'
     printf 'plan: %s\n' "$plan"

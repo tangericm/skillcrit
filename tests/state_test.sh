@@ -57,3 +57,50 @@ test_state_lock_ignores_dead_pid() {
   state_lock_ok
   assert_eq "0" "$?" "dead pid does not block"
 }
+
+test_state_preserves_blank_lines_in_notes() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  local notes
+  notes="$(printf 'alpha\n\nbeta')"
+  state_write "p.md" 1 2 "b" "c" "s" "none" "$notes"
+  local read_notes
+  read_notes="$(state_section 'Working notes')"
+  assert_eq "$notes" "$read_notes" "blank line in notes preserved"
+}
+
+test_state_preserves_blank_lines_in_sections() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  local step
+  step="$(printf 'do this\n\nthen that')"
+  state_write "p.md" 1 2 "b" "c" "$step" "none" "note"
+  local read_step
+  read_step="$(state_section 'Next concrete step')"
+  assert_eq "$step" "$read_step" "blank line in next step preserved"
+}
+
+test_state_caps_40_lines_with_blanks() {
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  local notes i
+  notes=""
+  i=1
+  while [ "$i" -le 50 ]; do
+    notes="$notes
+line$i"
+    if [ "$i" -lt 50 ]; then
+      notes="$notes
+"
+    fi
+    i=$((i + 1))
+  done
+  state_write "p.md" 1 2 "b" "c" "s" "none" "$notes"
+  local read_notes
+  read_notes="$(state_section 'Working notes')"
+  local line_count
+  line_count="$(printf '%s\n' "$read_notes" | grep -c '^line')"
+  assert_eq "20" "$line_count" "capped to 40 total lines (20 content + 20 blanks)"
+  assert_contains "$read_notes" "line50" "keeps newest line after cap"
+  assert_contains "$read_notes" "line31" "includes lines from middle range"
+}
