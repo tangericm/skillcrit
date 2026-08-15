@@ -7,18 +7,16 @@ cfg_file() {
 }
 
 cfg_get() {
-  local key="$1" default="${2-}" file val
+  local key="$1" default="${2-}" file raw
   file="$(cfg_file)"
   if [ -z "$file" ]; then
     printf '%s' "$default"
     return 0
   fi
-  val="$(jq -r --arg d "$default" \
-    "try (.$key) catch null | if . == null then \$d elif (type == \"array\" or type == \"object\") then tojson else tostring end" \
+  raw="$(jq -r "try (.$key) catch null | if . == null then \"@@MISSING@@\" else \"@@V@@\" + (if (type == \"array\" or type == \"object\") then tojson else tostring end) end" \
     "$file" 2>/dev/null)"
-  if [ -z "$val" ]; then
-    printf '%s' "$default"
-  else
-    printf '%s' "$val"
-  fi
+  case "$raw" in
+    "@@V@@"*) printf '%s' "${raw#@@V@@}" ;;
+    *)        printf '%s' "$default" ;;
+  esac
 }
