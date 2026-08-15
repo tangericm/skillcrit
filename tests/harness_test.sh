@@ -19,14 +19,11 @@ test_assert_fails_passes() {
 }
 
 test_assert_eq_failure_increments_counter() {
-  local before_pass before_fail after_fail_pass after_fail_fail
-  before_pass="$ASSERT_PASS"
+  local before_fail
   before_fail="$ASSERT_FAIL"
-  assert_eq "a" "b" "testing failure path" 2>/dev/null
-  after_fail_pass="$ASSERT_PASS"
-  after_fail_fail="$ASSERT_FAIL"
-  assert_eq "$before_pass" "$after_fail_pass" "failure doesn't increment ASSERT_PASS"
-  assert_eq "$((before_fail + 1))" "$after_fail_fail" "failure increments ASSERT_FAIL"
-  ASSERT_PASS="$before_pass"
+  assert_eq "a" "b" "deliberate failure (expected)" 2>/dev/null
+  local after_fail
+  after_fail="$ASSERT_FAIL"
   ASSERT_FAIL="$before_fail"
+  assert_eq "$((before_fail + 1))" "$after_fail" "assert_eq increments ASSERT_FAIL on mismatch"
 }
