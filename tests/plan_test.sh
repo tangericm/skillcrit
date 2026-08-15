@@ -30,13 +30,6 @@ test_plan_counts() {
   assert_eq "1 3" "$(plan_counts "$p")" "one of three done"
 }
 
-test_plan_tick_checks_the_box() {
-  local p; p="$(_fixture_plan)"
-  plan_tick "$p" 4
-  assert_eq "5" "$(plan_next_line "$p")" "next open task moved on"
-  assert_eq "2 3" "$(plan_counts "$p")" "two of three done"
-}
-
 test_plan_next_line_empty_when_complete() {
   AGENT_REPO="$(mktemp_repo)"
   printf -- '- [x] all done\n' > "$AGENT_REPO/PLAN.md"
@@ -48,10 +41,13 @@ test_plan_counts_returns_two_fields_for_a_missing_plan() {
   assert_eq "0 0" "$(plan_counts "$AGENT_REPO/nope.md")" "missing plan still yields two numbers"
 }
 
-test_plan_tick_is_idempotent_on_checked_line() {
-  local p; p="$(_fixture_plan)"
-  plan_tick "$p" 3
-  assert_eq "1 3" "$(plan_counts "$p")" "ticking a checked line changes nothing"
+test_plan_tick_is_gone() {
+  assert_eq "" "$(type -t plan_tick)" "plan_tick removed"
+}
+
+test_slice_functions_are_gone() {
+  assert_eq "" "$(type -t slice_disjoint)" "slice_disjoint removed"
+  assert_eq "" "$(type -t slice_module)" "slice_module removed"
 }
 
 test_plan_bootstrap_creates_a_navigable_plan() {

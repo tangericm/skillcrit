@@ -28,13 +28,6 @@ plan_counts() {
   printf '%s %s' "$done_n" "$total_n"
 }
 
-plan_tick() {
-  local plan="$1" line="$2" tmp
-  tmp="$(mktemp)"
-  awk -v ln="$line" 'NR == ln { sub(/- \[ \]/, "- [x]") } { print }' "$plan" > "$tmp" \
-    && mv "$tmp" "$plan"
-}
-
 plan_bootstrap() {
   local path="$1" goal="$2"
   if [ -e "$path" ]; then

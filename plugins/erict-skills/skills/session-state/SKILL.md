@@ -79,24 +79,48 @@ Execute exactly one task, then stop.
 3. **Implement** following the project's testing discipline from the rules file.
 4. **Gate.** `gate_level_for <changed files>` then `gate_run <level>`.
 5. **Commit** on green with `vcs_commit`.
-6. **Record.** `plan_tick "$plan" "$line"`, where `$line` is the line number
-   `plan_next_line "$plan"` gave you in step 1 — marks the task done. Write
-   the project's task report if it defines one. Then call `state_write` with
-   all eight positional arguments, in this fixed order. The function performs
-   no validation: a transposed or short call corrupts the cursor silently
-   instead of failing.
+6. **Record.** Edit the plan file directly: change the current task's
+   `- [ ]` to `- [x]`, on the exact line `plan_next_line "$plan"` gave you in
+   step 1. Match that line precisely and leave the surrounding text alone —
+   this is a hand edit, not a search-and-replace across the file. Write the
+   project's task report if it defines one.
 
-   ```bash
-   state_write \
-     "$plan" \                          # the active plan path, from detect_plan
-     "$next_task_number" \              # the task you just completed, plus one
-     "$total_tasks" \                   # plan_counts's SECOND field ("<done> <total>")
-     "$(vcs_current_branch)" \
-     "$(git rev-parse --short HEAD)" \  # the commit your gate just proved green
-     "$next_step" \                     # one imperative sentence
-     "$blockers" \                      # or "none"
-     "$notes"                           # capped working notes
+   Then run `state_stamp` and use the Write tool to compose `.agent/state.md`
+   yourself, substituting the six stamped lines verbatim and filling `plan`,
+   `task`, and `total_tasks` from what you already hold (the active plan path
+   from `detect_plan`, the task you just completed plus one, and
+   `plan_counts`'s second field):
+
+   ```markdown
+   ---
+   plan: <active plan path>
+   task: <task number just completed, plus one>
+   total_tasks: <plan_counts's second field>
+   branch: <stamped>
+   last_green: <stamped>
+   engine: <stamped>
+   pid: <stamped>
+   host: <stamped>
+   updated: <stamped>
+   ---
+
+   ## Next concrete step
+   <one imperative sentence>
+
+   ## Blockers
+   <or "none">
+
+   ## Working notes
+   <working notes, oldest first, newest last>
    ```
+
+   `state_get` and `state_section` read this back by key and heading, so the
+   shape must match exactly: `---` as the literal first line, one
+   `key: value` pair per frontmatter line, then `## Heading` lines with no
+   blank line between a heading and the text that follows it. Cap Working
+   notes at 40 lines — a documented convention, not something code enforces —
+   and when notes exceed the cap, **keep the newest 40 lines and drop the
+   oldest**.
 7. **Stop.** Report in under ten lines.
 
 Write the cursor after *every* task, not at the end of the session. There is no
@@ -123,9 +147,8 @@ When `detect_plan` is empty, run `/plan` **and then stop** — do not roll strai
 into unattended execution of a plan the user has not seen. `/auto` executes
 approved intent; a plan written seconds ago by the same loop is not that.
 
-On halt: call `state_write` with the same eight positional arguments as
-`/next` step 6 — plan, task, total, branch, last_green, next_step, blockers,
-notes, in that fixed order — then append a halt record to
+On halt: compose `.agent/state.md` the same way as `/next` step 6 — `state_stamp`
+plus the Write tool, from the same template — then append a halt record to
 `.agent/journal.md`, then produce a `/handoff`. Report one summary, not
 per-task narration.
 
@@ -135,9 +158,19 @@ Default: emit a paste-ready prompt containing the state file, plan path, branch,
 next step, the rules file path, and the gate commands. Keep it engine-neutral —
 the same text must work in Claude or Codex.
 
-`parallel`: also choose a slice and prove it disjoint with
-`slice_disjoint "<current files>" "<candidate files>"`. Name a new branch
+`parallel`: also choose a slice and prove it disjoint from the current work,
+by hand:
+
+1. List the files the current work touches and the files the candidate slice
+   touches.
+2. Map each file to a module: if `.agent/config.json` has a `modules` map,
+   use the name of the first entry whose glob matches the file; otherwise use
+   the file's first two path components (or just the first, if the path has
+   only one).
+3. Compare the two module sets. If they share a module, **refuse rather than
+   guess** — name the shared module in the refusal.
+
+Only when the sets are disjoint: name a new branch
 (`$(cfg_get vcs.branch_prefix agent/)<short-name>`) and worktree path
 (`$(cfg_get vcs.worktree_root .worktrees)/<short-name>`), and state the file
-ownership boundary explicitly. **If `slice_disjoint` fails, refuse and say why.**
-Do not guess.
+ownership boundary explicitly.

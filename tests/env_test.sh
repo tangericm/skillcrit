@@ -11,6 +11,13 @@ test_erict_env_sets_repo_and_engine() {
 test_erict_env_exposes_all_functions() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint | tr '\n' ' '")"
-  assert_eq "function function function function function function " "$out" "all modules sourced"
+  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t cfg_get state_stamp plan_next_line gate_run vcs_can_commit | tr '\n' ' '")"
+  assert_eq "function function function function function " "$out" "all modules sourced"
+}
+
+test_erict_env_no_longer_exposes_removed_functions() {
+  local repo; repo="$(mktemp_repo)"
+  local out
+  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t state_write plan_tick slice_disjoint slice_module | tr '\n' ' '")"
+  assert_eq "" "$out" "removed functions are not sourced by env.sh"
 }

@@ -60,20 +60,18 @@ test_portable_strip_cr_removes_carriage_returns() {
 test_state_lock_ignores_a_pid_from_another_host() {
   AGENT_REPO="$(mktemp_repo)"
   AGENT_ENGINE=claude
-  state_write "p.md" 1 2 "b" "c" "s" "none" ""
-  awk -v pid="$$" '{
-    sub(/^engine: claude$/, "engine: codex")
-    sub(/^pid: .*$/, "pid: " pid)
-    sub(/^host: .*$/, "host: some-other-machine")
-    print
-  }' "$(state_path)" > "$(state_path).tmp" && mv "$(state_path).tmp" "$(state_path)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf -- '---\nengine: codex\npid: %s\nhost: some-other-machine\n---\n\n## Next concrete step\nstep\n' \
+    "$$" > "$(state_path)"
   assert_fails "a live pid on another host is not proof of liveness" state_lock_ok
 }
 
 test_state_records_this_host() {
   AGENT_REPO="$(mktemp_repo)"
   AGENT_ENGINE=claude
-  state_write "p.md" 1 2 "b" "c" "s" "none" ""
+  mkdir -p "$AGENT_REPO/.agent"
+  printf -- '---\nengine: claude\nhost: %s\n---\n\n## Next concrete step\nstep\n' \
+    "$(portable_host)" > "$(state_path)"
   assert_eq "$(portable_host)" "$(state_get host)" "host round-trips"
 }
 

@@ -1,7 +1,7 @@
 #!/bin/bash
-# Reads and writes .agent/state.md — a cursor, never a copy.
-
-STATE_NOTES_MAX=40
+# Reads .agent/state.md — a cursor, never a copy — and stamps the machine
+# facts a model cannot read off. The model composes the file itself; see
+# state_stamp below and the template in skills/session-state/SKILL.md.
 
 state_path() {
   printf '%s' "${AGENT_REPO:-.}/.agent/state.md"
@@ -59,63 +59,11 @@ state_lock_ok() {
   return 0
 }
 
-state_write() {
-  local plan="$1" task="$2" total="$3" branch="$4" last_green="$5"
-  local next_step="$6" blockers="$7" notes="$8"
-  local file dir capped
-  file="$(state_path)"
-  dir="$(dirname "$file")"
-  mkdir -p "$dir"
-  capped="$(printf '%s\n' "$notes" | awk '
-    { lines[n++] = $0 }
-    END {
-      first = -1
-      last = -1
-      for (i = 0; i < n; i++) {
-        if (lines[i] ~ /[^[:space:]]/) {
-          if (first == -1) first = i
-          last = i
-        }
-      }
-      if (first >= 0) {
-        trimmed_n = last - first + 1
-        if (trimmed_n > '"$STATE_NOTES_MAX"') {
-          start = trimmed_n - '"$STATE_NOTES_MAX"'
-        } else {
-          start = 0
-        }
-        for (i = start; i <= last - first; i++) {
-          window[w++] = lines[first + i]
-        }
-        w_first = -1
-        w_last = -1
-        for (i = 0; i < w; i++) {
-          if (window[i] ~ /[^[:space:]]/) {
-            if (w_first == -1) w_first = i
-            w_last = i
-          }
-        }
-        if (w_first >= 0) {
-          for (i = w_first; i <= w_last; i++) print window[i]
-        }
-      }
-    }
-  ')"
-  {
-    printf -- '---\n'
-    printf 'plan: %s\n' "$plan"
-    printf 'task: %s\n' "$task"
-    printf 'total_tasks: %s\n' "$total"
-    printf 'branch: %s\n' "$branch"
-    printf 'worktree: %s\n' "${AGENT_REPO:-.}"
-    printf 'last_green: %s\n' "$last_green"
-    printf 'engine: %s\n' "${AGENT_ENGINE:-unknown}"
-    printf 'host: %s\n' "$(portable_host)"
-    printf 'pid: %s\n' "$$"
-    printf 'updated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    printf -- '---\n\n'
-    printf '## Next concrete step\n%s\n\n' "$next_step"
-    printf '## Blockers\n%s\n\n' "$blockers"
-    printf '## Working notes\n%s\n' "$capped"
-  } > "$file"
+state_stamp() {
+  printf 'branch: %s\n' "$(vcs_current_branch)"
+  printf 'last_green: %s\n' "$(git -C "${AGENT_REPO:-.}" rev-parse --short HEAD 2>/dev/null)"
+  printf 'engine: %s\n' "${AGENT_ENGINE:-unknown}"
+  printf 'pid: %s\n' "$$"
+  printf 'host: %s\n' "$(portable_host)"
+  printf 'updated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
