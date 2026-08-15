@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "erict-skills agent config",
+  "title": "agent-loop agent config",
   "type": "object",
   "additionalProperties": false,
   "properties": {

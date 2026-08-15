@@ -16,15 +16,15 @@ description: >
 Every command begins by sourcing the library. Run this first, always:
 
 ```bash
-ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
-  -path '*erict-skills*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$ERICT_LIB" ] || { echo "erict-skills lib not found"; exit 1; }
-. "$ERICT_LIB/env.sh" && erict_env claude   # or: erict_env codex
+AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
+  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
+[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
+. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
 ```
 
 Neither engine guarantees a variable naming the skill's own directory, and the
 pack lives under a different cache path in each. Discovery is the portable
-answer; export `ERICT_LIB` once and reuse it for the rest of the session.
+answer; export `AGENT_LOOP_LIB` once and reuse it for the rest of the session.
 
 Read `.agent/rules.md` (or whatever `review.rules` names) before implementing
 anything. It holds the project's own discipline, and it overrides this file.

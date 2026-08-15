@@ -1,5 +1,5 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
+. "$AGENT_LOOP_LIB/config.sh"
 
 test_cfg_get_returns_default_when_no_config() {
   AGENT_REPO="$(mktemp_repo)"

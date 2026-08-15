@@ -21,7 +21,7 @@ portable_require() {
     command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
   done
   if [ -n "$missing" ]; then
-    printf 'erict-skills requires these tools on PATH, and they are missing:%s\n' "$missing" >&2
+    printf 'agent-loop requires these tools on PATH, and they are missing:%s\n' "$missing" >&2
     printf 'On macOS: brew install jq. On Debian/Ubuntu: apt-get install jq.\n' >&2
     printf 'On Windows use Git Bash or WSL; PowerShell and cmd are not supported.\n' >&2
     return 1

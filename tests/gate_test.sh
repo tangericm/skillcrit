@@ -1,7 +1,7 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/detect.sh"
-. "$ERICT_LIB/gate.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/gate.sh"
 
 _gate_repo() {
   AGENT_REPO="$(mktemp_repo)"

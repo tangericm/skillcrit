@@ -1,8 +1,8 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/portable.sh"
-. "$ERICT_LIB/vcs.sh"
-. "$ERICT_LIB/state.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/portable.sh"
+. "$AGENT_LOOP_LIB/vcs.sh"
+. "$AGENT_LOOP_LIB/state.sh"
 
 test_state_stamp_emits_machine_fields() {
   AGENT_REPO="$(mktemp_repo)"

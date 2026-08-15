@@ -1,4 +1,4 @@
-# erict-skills Cross-Engine Agent Workflow Implementation Plan
+# agent-loop Cross-Engine Agent Workflow Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -26,21 +26,21 @@
 
 | Path | Responsibility |
 |---|---|
-| `plugins/erict-skills/lib/config.sh` | read `.agent/config.json` with defaults |
-| `plugins/erict-skills/lib/detect.sh` | discover plan files and gate commands in an unconfigured repo |
-| `plugins/erict-skills/lib/state.sh` | read/write `.agent/state.md`, notes cap, concurrent-writer lock |
-| `plugins/erict-skills/lib/plan.sh` | locate next unchecked task, count tasks, tick a checkbox |
-| `plugins/erict-skills/lib/gate.sh` | choose and run a gate level |
-| `plugins/erict-skills/lib/vcs.sh` | default-branch refusal, `PATH` preflight, commit |
-| `plugins/erict-skills/lib/slice.sh` | prove two work slices are disjoint |
-| `plugins/erict-skills/lib/adversarial.sh` | route to the counterpart engine, reconcile verdicts |
-| `plugins/erict-skills/schema/agent-config.schema.json` | validate `.agent/config.json` |
-| `plugins/erict-skills/schema/findings.schema.json` | validate reviewer output |
-| `plugins/erict-skills/skills/session-state/SKILL.md` | procedure for `/status` `/next` `/auto` `/handoff` |
-| `plugins/erict-skills/skills/adversarial-review/SKILL.md` | procedure for `/adversarial` |
-| `plugins/erict-skills/commands/*.md` | Claude-only shims naming the skill |
+| `plugins/agent-loop/lib/config.sh` | read `.agent/config.json` with defaults |
+| `plugins/agent-loop/lib/detect.sh` | discover plan files and gate commands in an unconfigured repo |
+| `plugins/agent-loop/lib/state.sh` | read/write `.agent/state.md`, notes cap, concurrent-writer lock |
+| `plugins/agent-loop/lib/plan.sh` | locate next unchecked task, count tasks, tick a checkbox |
+| `plugins/agent-loop/lib/gate.sh` | choose and run a gate level |
+| `plugins/agent-loop/lib/vcs.sh` | default-branch refusal, `PATH` preflight, commit |
+| `plugins/agent-loop/lib/slice.sh` | prove two work slices are disjoint |
+| `plugins/agent-loop/lib/adversarial.sh` | route to the counterpart engine, reconcile verdicts |
+| `plugins/agent-loop/schema/agent-config.schema.json` | validate `.agent/config.json` |
+| `plugins/agent-loop/schema/findings.schema.json` | validate reviewer output |
+| `plugins/agent-loop/skills/session-state/SKILL.md` | procedure for `/status` `/next` `/auto` `/handoff` |
+| `plugins/agent-loop/skills/adversarial-review/SKILL.md` | procedure for `/adversarial` |
+| `plugins/agent-loop/commands/*.md` | Claude-only shims naming the skill |
 | `.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json` | Claude packaging + hooks |
-| `plugins/erict-skills/.codex-plugin/plugin.json` | Codex packaging |
+| `plugins/agent-loop/.codex-plugin/plugin.json` | Codex packaging |
 | `tests/run.sh`, `tests/*_test.sh` | bash fixtures |
 
 ---
@@ -138,7 +138,7 @@ mktemp_repo() {
 #!/bin/bash
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export ERICT_LIB="$ROOT/plugins/erict-skills/lib"
+export AGENT_LOOP_LIB="$ROOT/plugins/agent-loop/lib"
 . "$ROOT/tests/helpers.sh"
 
 for file in "$ROOT"/tests/*_test.sh; do
@@ -171,8 +171,8 @@ git commit -m "test: add bash fixture harness"
 ### Task 2: Configuration reader
 
 **Files:**
-- Create: `plugins/erict-skills/lib/config.sh`
-- Create: `plugins/erict-skills/schema/agent-config.schema.json`
+- Create: `plugins/agent-loop/lib/config.sh`
+- Create: `plugins/agent-loop/schema/agent-config.schema.json`
 - Create: `tests/config_test.sh`
 
 **Interfaces:**
@@ -188,7 +188,7 @@ git commit -m "test: add bash fixture harness"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
+. "$AGENT_LOOP_LIB/config.sh"
 
 test_cfg_get_returns_default_when_no_config() {
   AGENT_REPO="$(mktemp_repo)"
@@ -232,7 +232,7 @@ Expected: FAIL — `config.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/config.sh`:
+`plugins/agent-loop/lib/config.sh`:
 
 ```bash
 #!/bin/bash
@@ -261,12 +261,12 @@ cfg_get() {
 }
 ```
 
-`plugins/erict-skills/schema/agent-config.schema.json`:
+`plugins/agent-loop/schema/agent-config.schema.json`:
 
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "erict-skills agent config",
+  "title": "agent-loop agent config",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -348,7 +348,7 @@ Expected: PASS — 5 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/config.sh plugins/erict-skills/schema/agent-config.schema.json tests/config_test.sh
+git add plugins/agent-loop/lib/config.sh plugins/agent-loop/schema/agent-config.schema.json tests/config_test.sh
 git commit -m "feat: read optional .agent/config.json with defaults"
 ```
 
@@ -357,7 +357,7 @@ git commit -m "feat: read optional .agent/config.json with defaults"
 ### Task 3: Plan and gate detection
 
 **Files:**
-- Create: `plugins/erict-skills/lib/detect.sh`
+- Create: `plugins/agent-loop/lib/detect.sh`
 - Create: `tests/detect_test.sh`
 
 **Interfaces:**
@@ -372,8 +372,8 @@ git commit -m "feat: read optional .agent/config.json with defaults"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
 
 test_detect_plan_finds_todo_in_bare_repo() {
   AGENT_REPO="$(mktemp_repo)"
@@ -440,7 +440,7 @@ Expected: FAIL — `detect.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/detect.sh`:
+`plugins/agent-loop/lib/detect.sh`:
 
 ```bash
 #!/bin/bash
@@ -526,7 +526,7 @@ Expected: PASS — 7 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/detect.sh tests/detect_test.sh
+git add plugins/agent-loop/lib/detect.sh tests/detect_test.sh
 git commit -m "feat: detect plans and gates in unconfigured repositories"
 ```
 
@@ -535,7 +535,7 @@ git commit -m "feat: detect plans and gates in unconfigured repositories"
 ### Task 4: State file read and write
 
 **Files:**
-- Create: `plugins/erict-skills/lib/state.sh`
+- Create: `plugins/agent-loop/lib/state.sh`
 - Create: `tests/state_test.sh`
 
 **Interfaces:**
@@ -553,8 +553,8 @@ git commit -m "feat: detect plans and gates in unconfigured repositories"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/state.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/state.sh"
 
 test_state_round_trip() {
   AGENT_REPO="$(mktemp_repo)"
@@ -620,7 +620,7 @@ Expected: FAIL — `state.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/state.sh`:
+`plugins/agent-loop/lib/state.sh`:
 
 ```bash
 #!/bin/bash
@@ -747,7 +747,7 @@ Expected: PASS — 9 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/state.sh tests/state_test.sh
+git add plugins/agent-loop/lib/state.sh tests/state_test.sh
 git commit -m "feat: read and write the session cursor with a writer lock"
 ```
 
@@ -756,7 +756,7 @@ git commit -m "feat: read and write the session cursor with a writer lock"
 ### Task 5: Plan task navigation
 
 **Files:**
-- Create: `plugins/erict-skills/lib/plan.sh`
+- Create: `plugins/agent-loop/lib/plan.sh`
 - Create: `tests/plan_test.sh`
 
 **Interfaces:**
@@ -776,8 +776,8 @@ git commit -m "feat: read and write the session cursor with a writer lock"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/plan.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/plan.sh"
 
 _fixture_plan() {
   AGENT_REPO="$(mktemp_repo)"
@@ -854,7 +854,7 @@ Expected: FAIL — `plan.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/plan.sh`:
+`plugins/agent-loop/lib/plan.sh`:
 
 ```bash
 #!/bin/bash
@@ -927,7 +927,7 @@ Expected: PASS — 7 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/plan.sh tests/plan_test.sh
+git add plugins/agent-loop/lib/plan.sh tests/plan_test.sh
 git commit -m "feat: navigate and tick markdown plan checkboxes"
 ```
 
@@ -936,7 +936,7 @@ git commit -m "feat: navigate and tick markdown plan checkboxes"
 ### Task 6: Gate selection and execution
 
 **Files:**
-- Create: `plugins/erict-skills/lib/gate.sh`
+- Create: `plugins/agent-loop/lib/gate.sh`
 - Create: `tests/gate_test.sh`
 
 **Interfaces:**
@@ -952,9 +952,9 @@ git commit -m "feat: navigate and tick markdown plan checkboxes"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/detect.sh"
-. "$ERICT_LIB/gate.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/gate.sh"
 
 _gate_repo() {
   AGENT_REPO="$(mktemp_repo)"
@@ -1024,7 +1024,7 @@ Expected: FAIL — `gate.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/gate.sh`:
+`plugins/agent-loop/lib/gate.sh`:
 
 ```bash
 #!/bin/bash
@@ -1103,7 +1103,7 @@ Expected: PASS — 5 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/gate.sh tests/gate_test.sh
+git add plugins/agent-loop/lib/gate.sh tests/gate_test.sh
 git commit -m "feat: select and run the narrowest proving gate"
 ```
 
@@ -1112,7 +1112,7 @@ git commit -m "feat: select and run the narrowest proving gate"
 ### Task 7: Version-control safety rails
 
 **Files:**
-- Create: `plugins/erict-skills/lib/vcs.sh`
+- Create: `plugins/agent-loop/lib/vcs.sh`
 - Create: `tests/vcs_test.sh`
 
 **Interfaces:**
@@ -1131,8 +1131,8 @@ git commit -m "feat: select and run the narrowest proving gate"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/vcs.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/vcs.sh"
 
 test_default_branch_is_main() {
   AGENT_REPO="$(mktemp_repo)"
@@ -1190,7 +1190,7 @@ Expected: FAIL — `vcs.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/vcs.sh`:
+`plugins/agent-loop/lib/vcs.sh`:
 
 ```bash
 #!/bin/bash
@@ -1285,7 +1285,7 @@ Expected: PASS — 8 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/vcs.sh tests/vcs_test.sh
+git add plugins/agent-loop/lib/vcs.sh tests/vcs_test.sh
 git commit -m "feat: add version-control safety rails"
 ```
 
@@ -1294,7 +1294,7 @@ git commit -m "feat: add version-control safety rails"
 ### Task 8: Disjoint slice proof for parallel handoff
 
 **Files:**
-- Create: `plugins/erict-skills/lib/slice.sh`
+- Create: `plugins/agent-loop/lib/slice.sh`
 - Create: `tests/slice_test.sh`
 
 **Interfaces:**
@@ -1309,8 +1309,8 @@ git commit -m "feat: add version-control safety rails"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/slice.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/slice.sh"
 
 _slice_repo() {
   AGENT_REPO="$(mktemp_repo)"
@@ -1385,7 +1385,7 @@ Expected: FAIL — `slice.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/slice.sh`:
+`plugins/agent-loop/lib/slice.sh`:
 
 ```bash
 #!/bin/bash
@@ -1442,7 +1442,7 @@ Expected: PASS — 5 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/slice.sh tests/slice_test.sh
+git add plugins/agent-loop/lib/slice.sh tests/slice_test.sh
 git commit -m "feat: prove work slices are disjoint before parallel handoff"
 ```
 
@@ -1451,13 +1451,13 @@ git commit -m "feat: prove work slices are disjoint before parallel handoff"
 ### Task 9: The session-state skill
 
 **Files:**
-- Create: `plugins/erict-skills/skills/session-state/SKILL.md`
-- Create: `plugins/erict-skills/commands/status.md`
-- Create: `plugins/erict-skills/commands/next.md`
-- Create: `plugins/erict-skills/commands/auto.md`
-- Create: `plugins/erict-skills/commands/handoff.md`
-- Create: `plugins/erict-skills/commands/plan.md`
-- Create: `plugins/erict-skills/lib/env.sh`
+- Create: `plugins/agent-loop/skills/session-state/SKILL.md`
+- Create: `plugins/agent-loop/commands/status.md`
+- Create: `plugins/agent-loop/commands/next.md`
+- Create: `plugins/agent-loop/commands/auto.md`
+- Create: `plugins/agent-loop/commands/handoff.md`
+- Create: `plugins/agent-loop/commands/plan.md`
+- Create: `plugins/agent-loop/lib/env.sh`
 - Create: `tests/env_test.sh`
 
 **Interfaces:**
@@ -1474,7 +1474,7 @@ git commit -m "feat: prove work slices are disjoint before parallel handoff"
 test_erict_env_sets_repo_and_engine() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env codex; printf '%s|%s' \"\$AGENT_REPO\" \"\$AGENT_ENGINE\"")"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env codex; printf '%s|%s' \"\$AGENT_REPO\" \"\$AGENT_ENGINE\"")"
   assert_contains "$out" "|codex" "engine exported"
   assert_contains "$out" "$(basename "$repo")" "repo toplevel exported"
 }
@@ -1482,7 +1482,7 @@ test_erict_env_sets_repo_and_engine() {
 test_erict_env_exposes_all_functions() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint | tr '\n' ' '")"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint | tr '\n' ' '")"
   assert_eq "function function function function function function " "$out" "all modules sourced"
 }
 ```
@@ -1494,7 +1494,7 @@ Expected: FAIL — `env.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/env.sh`:
+`plugins/agent-loop/lib/env.sh`:
 
 ```bash
 #!/bin/bash
@@ -1516,7 +1516,7 @@ erict_env() {
 }
 ```
 
-`plugins/erict-skills/skills/session-state/SKILL.md`:
+`plugins/agent-loop/skills/session-state/SKILL.md`:
 
 ```markdown
 ---
@@ -1537,15 +1537,15 @@ description: >
 Every command begins by sourcing the library. Run this first, always:
 
 ```bash
-ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
-  -path '*erict-skills*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$ERICT_LIB" ] || { echo "erict-skills lib not found"; exit 1; }
-. "$ERICT_LIB/env.sh" && erict_env claude   # or: erict_env codex
+AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
+  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
+[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
+. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
 ```
 
 Neither engine guarantees a variable naming the skill's own directory, and the
 pack lives under a different cache path in each. Discovery is the portable
-answer; export `ERICT_LIB` once and reuse it for the rest of the session.
+answer; export `AGENT_LOOP_LIB` once and reuse it for the rest of the session.
 
 Read `.agent/rules.md` (or whatever `review.rules` names) before implementing
 anything. It holds the project's own discipline, and it overrides this file.
@@ -1664,7 +1664,7 @@ ownership boundary explicitly. **If `slice_disjoint` fails, refuse and say why.*
 Do not guess.
 ```
 
-`plugins/erict-skills/commands/status.md`:
+`plugins/agent-loop/commands/status.md`:
 
 ```markdown
 ---
@@ -1675,7 +1675,7 @@ Use the `session-state` skill and follow its `/status` procedure. Call
 `erict_env claude`. Do not write any file.
 ```
 
-`plugins/erict-skills/commands/next.md`:
+`plugins/agent-loop/commands/next.md`:
 
 ```markdown
 ---
@@ -1686,7 +1686,7 @@ Use the `session-state` skill and follow its `/next` procedure. Call
 `erict_env claude`. Execute exactly one task and stop.
 ```
 
-`plugins/erict-skills/commands/auto.md`:
+`plugins/agent-loop/commands/auto.md`:
 
 ```markdown
 ---
@@ -1697,7 +1697,7 @@ Use the `session-state` skill and follow its `/auto` procedure. Call
 `erict_env claude`. Never merge, never push.
 ```
 
-`plugins/erict-skills/commands/plan.md`:
+`plugins/agent-loop/commands/plan.md`:
 
 ```markdown
 ---
@@ -1709,7 +1709,7 @@ Use the `session-state` skill and follow its `/plan` procedure. Call
 Never create a second plan when an open one already exists. Goal: $ARGUMENTS
 ```
 
-`plugins/erict-skills/commands/handoff.md`:
+`plugins/agent-loop/commands/handoff.md`:
 
 ```markdown
 ---
@@ -1728,7 +1728,7 @@ Expected: PASS — 3 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/env.sh plugins/erict-skills/skills/session-state/ plugins/erict-skills/commands/ tests/env_test.sh
+git add plugins/agent-loop/lib/env.sh plugins/agent-loop/skills/session-state/ plugins/agent-loop/commands/ tests/env_test.sh
 git commit -m "feat: add the session-state skill and command shims"
 ```
 
@@ -1739,9 +1739,9 @@ git commit -m "feat: add the session-state skill and command shims"
 **Files:**
 - Create: `.claude-plugin/marketplace.json`
 - Create: `.claude-plugin/plugin.json`
-- Create: `plugins/erict-skills/.codex-plugin/plugin.json`
-- Create: `plugins/erict-skills/hooks/session_start.sh`
-- Create: `plugins/erict-skills/hooks/git_guard.sh`
+- Create: `plugins/agent-loop/.codex-plugin/plugin.json`
+- Create: `plugins/agent-loop/hooks/session_start.sh`
+- Create: `plugins/agent-loop/hooks/git_guard.sh`
 - Create: `tests/packaging_test.sh`
 
 **Interfaces:**
@@ -1759,17 +1759,17 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 test_manifests_are_valid_json() {
   assert_eq "0" "$(jq -e . "$ROOT_DIR/.claude-plugin/marketplace.json" >/dev/null 2>&1; echo $?)" "marketplace.json parses"
   assert_eq "0" "$(jq -e . "$ROOT_DIR/.claude-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "claude plugin.json parses"
-  assert_eq "0" "$(jq -e . "$ROOT_DIR/plugins/erict-skills/.codex-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "codex plugin.json parses"
+  assert_eq "0" "$(jq -e . "$ROOT_DIR/plugins/agent-loop/.codex-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "codex plugin.json parses"
 }
 
 test_codex_manifest_points_at_shared_skills() {
-  assert_eq "./skills/" "$(jq -r '.skills' "$ROOT_DIR/plugins/erict-skills/.codex-plugin/plugin.json")" "codex reads shared skills dir"
+  assert_eq "./skills/" "$(jq -r '.skills' "$ROOT_DIR/plugins/agent-loop/.codex-plugin/plugin.json")" "codex reads shared skills dir"
 }
 
 test_every_skill_has_name_and_description() {
   local f found
   found=0
-  for f in "$ROOT_DIR"/plugins/erict-skills/skills/*/SKILL.md; do
+  for f in "$ROOT_DIR"/plugins/agent-loop/skills/*/SKILL.md; do
     [ -f "$f" ] || continue
     found=$((found + 1))
     assert_eq "1" "$(head -1 "$f" | grep -c -- '---')" "$(basename "$(dirname "$f")") starts with frontmatter"
@@ -1784,14 +1784,14 @@ test_git_guard_blocks_when_preflight_tool_missing() {
   mkdir -p "$repo/.agent"
   printf '{"preflight":["definitely-not-a-real-tool"]}\n' > "$repo/.agent/config.json"
   assert_fails "guard blocks missing tool" \
-    bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"git merge x\"}}' | bash '$ROOT_DIR/plugins/erict-skills/hooks/git_guard.sh'"
+    bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"git merge x\"}}' | bash '$ROOT_DIR/plugins/agent-loop/hooks/git_guard.sh'"
 }
 
 test_git_guard_allows_non_git_commands() {
   local repo; repo="$(mktemp_repo)"
   mkdir -p "$repo/.agent"
   printf '{"preflight":["definitely-not-a-real-tool"]}\n' > "$repo/.agent/config.json"
-  bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"ls -la\"}}' | bash '$ROOT_DIR/plugins/erict-skills/hooks/git_guard.sh'"
+  bash -c "cd '$repo' && printf '{\"tool_input\":{\"command\":\"ls -la\"}}' | bash '$ROOT_DIR/plugins/agent-loop/hooks/git_guard.sh'"
   assert_eq "0" "$?" "non-git command passes through"
 }
 ```
@@ -1813,9 +1813,9 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {
-      "name": "erict-skills",
+      "name": "agent-loop",
       "description": "Durable session position and cross-engine review for any repository.",
-      "source": "./plugins/erict-skills",
+      "source": "./plugins/agent-loop",
       "category": "workflow"
     }
   ]
@@ -1826,7 +1826,7 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
 
 ```json
 {
-  "name": "erict-skills",
+  "name": "agent-loop",
   "description": "Durable session position, unattended plan execution, and cross-engine adversarial review.",
   "author": { "name": "Eric Tang" },
   "hooks": {
@@ -1858,11 +1858,11 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
 }
 ```
 
-`plugins/erict-skills/.codex-plugin/plugin.json`:
+`plugins/agent-loop/.codex-plugin/plugin.json`:
 
 ```json
 {
-  "name": "erict-skills",
+  "name": "agent-loop",
   "version": "0.1.0",
   "description": "Durable session position, unattended plan execution, and cross-engine adversarial review.",
   "author": { "name": "Eric Tang" },
@@ -1880,7 +1880,7 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
 }
 ```
 
-`plugins/erict-skills/hooks/session_start.sh`:
+`plugins/agent-loop/hooks/session_start.sh`:
 
 ```bash
 #!/bin/bash
@@ -1894,7 +1894,7 @@ cat "$state"
 exit 0
 ```
 
-`plugins/erict-skills/hooks/git_guard.sh`:
+`plugins/agent-loop/hooks/git_guard.sh`:
 
 ```bash
 #!/bin/bash
@@ -1930,7 +1930,7 @@ Expected: PASS — new packaging assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude-plugin/ plugins/erict-skills/.codex-plugin/ plugins/erict-skills/hooks/ tests/packaging_test.sh
+git add .claude-plugin/ plugins/agent-loop/.codex-plugin/ plugins/agent-loop/hooks/ tests/packaging_test.sh
 git commit -m "feat: package for both Claude Code and Codex"
 ```
 
@@ -1939,8 +1939,8 @@ git commit -m "feat: package for both Claude Code and Codex"
 ### Task 11: Findings schema and verdict reconciliation
 
 **Files:**
-- Create: `plugins/erict-skills/schema/findings.schema.json`
-- Create: `plugins/erict-skills/lib/adversarial.sh`
+- Create: `plugins/agent-loop/schema/findings.schema.json`
+- Create: `plugins/agent-loop/lib/adversarial.sh`
 - Create: `tests/reconcile_test.sh`
 
 **Interfaces:**
@@ -1955,8 +1955,8 @@ git commit -m "feat: package for both Claude Code and Codex"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/adversarial.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/adversarial.sh"
 
 _write_findings() {
   local path="$1"; shift
@@ -2011,7 +2011,7 @@ Expected: FAIL — `adversarial.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/schema/findings.schema.json`:
+`plugins/agent-loop/schema/findings.schema.json`:
 
 ```json
 {
@@ -2038,7 +2038,7 @@ Expected: FAIL — `adversarial.sh: No such file or directory`
 }
 ```
 
-`plugins/erict-skills/lib/adversarial.sh`:
+`plugins/agent-loop/lib/adversarial.sh`:
 
 ```bash
 #!/bin/bash
@@ -2078,7 +2078,7 @@ Expected: PASS — 7 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/schema/findings.schema.json plugins/erict-skills/lib/adversarial.sh tests/reconcile_test.sh
+git add plugins/agent-loop/schema/findings.schema.json plugins/agent-loop/lib/adversarial.sh tests/reconcile_test.sh
 git commit -m "feat: reconcile cross-engine verdicts without averaging"
 ```
 
@@ -2087,7 +2087,7 @@ git commit -m "feat: reconcile cross-engine verdicts without averaging"
 ### Task 12: Counterpart-engine routing
 
 **Files:**
-- Modify: `plugins/erict-skills/lib/adversarial.sh` (append)
+- Modify: `plugins/agent-loop/lib/adversarial.sh` (append)
 - Create: `tests/routing_test.sh`
 
 **Interfaces:**
@@ -2103,8 +2103,8 @@ git commit -m "feat: reconcile cross-engine verdicts without averaging"
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/adversarial.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/adversarial.sh"
 
 test_counterpart_of_claude_is_codex() {
   assert_eq "codex" "$(adv_counterpart claude)" "claude routes to codex"
@@ -2153,7 +2153,7 @@ Expected: FAIL — `adv_counterpart: command not found`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Append to `plugins/erict-skills/lib/adversarial.sh`:
+Append to `plugins/agent-loop/lib/adversarial.sh`:
 
 ```bash
 # --- counterpart routing -----------------------------------------------------
@@ -2215,7 +2215,7 @@ Expected: PASS — 8 new assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/adversarial.sh tests/routing_test.sh
+git add plugins/agent-loop/lib/adversarial.sh tests/routing_test.sh
 git commit -m "feat: route adversarial review to the counterpart engine"
 ```
 
@@ -2224,10 +2224,10 @@ git commit -m "feat: route adversarial review to the counterpart engine"
 ### Task 13: The adversarial-review skill
 
 **Files:**
-- Create: `plugins/erict-skills/skills/adversarial-review/SKILL.md`
-- Create: `plugins/erict-skills/commands/adversarial.md`
-- Create: `plugins/erict-skills/agents/refuter.md`
-- Modify: `plugins/erict-skills/lib/env.sh` (source `adversarial.sh`)
+- Create: `plugins/agent-loop/skills/adversarial-review/SKILL.md`
+- Create: `plugins/agent-loop/commands/adversarial.md`
+- Create: `plugins/agent-loop/agents/refuter.md`
+- Modify: `plugins/agent-loop/lib/env.sh` (source `adversarial.sh`)
 - Modify: `tests/env_test.sh` (assert the new function is exposed)
 
 **Interfaces:**
@@ -2242,7 +2242,7 @@ Replace `test_erict_env_exposes_all_functions` in `tests/env_test.sh`:
 test_erict_env_exposes_all_functions() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$ERICT_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint adv_reconcile adv_counterpart | tr '\n' ' '")"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint adv_reconcile adv_counterpart | tr '\n' ' '")"
   assert_eq "function function function function function function function function " "$out" "all modules sourced"
 }
 ```
@@ -2254,13 +2254,13 @@ Expected: FAIL — `adv_reconcile` reports empty instead of `function`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add to `erict_env` in `plugins/erict-skills/lib/env.sh`, after the `slice.sh` line:
+Add to `erict_env` in `plugins/agent-loop/lib/env.sh`, after the `slice.sh` line:
 
 ```bash
   . "$here/adversarial.sh"
 ```
 
-`plugins/erict-skills/agents/refuter.md`:
+`plugins/agent-loop/agents/refuter.md`:
 
 ```markdown
 ---
@@ -2284,7 +2284,7 @@ Return a JSON array matching `schema/findings.schema.json`. Nothing else — no
 prose before or after.
 ```
 
-`plugins/erict-skills/skills/adversarial-review/SKILL.md`:
+`plugins/agent-loop/skills/adversarial-review/SKILL.md`:
 
 ```markdown
 ---
@@ -2301,10 +2301,10 @@ description: >
 # Adversarial review
 
 ```bash
-ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
-  -path '*erict-skills*' -name env.sh 2>/dev/null | head -1)")"
-[ -n "$ERICT_LIB" ] || { echo "erict-skills lib not found"; exit 1; }
-. "$ERICT_LIB/env.sh" && erict_env claude   # or: erict_env codex
+AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
+  -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
+[ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
+. "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
 adv_check_counterpart "$AGENT_ENGINE" || exit 1
 ```
 
@@ -2355,7 +2355,7 @@ exactly the signal the second engine was bought for.
 Do not fix anything. This command reports; the user decides.
 ```
 
-`plugins/erict-skills/commands/adversarial.md`:
+`plugins/agent-loop/commands/adversarial.md`:
 
 ```markdown
 ---
@@ -2375,7 +2375,7 @@ Expected: PASS — all assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/skills/adversarial-review/ plugins/erict-skills/commands/adversarial.md plugins/erict-skills/agents/refuter.md plugins/erict-skills/lib/env.sh tests/env_test.sh
+git add plugins/agent-loop/skills/adversarial-review/ plugins/agent-loop/commands/adversarial.md plugins/agent-loop/agents/refuter.md plugins/agent-loop/lib/env.sh tests/env_test.sh
 git commit -m "feat: add the cross-engine adversarial review skill"
 ```
 
@@ -2416,11 +2416,11 @@ Expected: PASS — every assertion from Tasks 1–13 green. Do not install a fai
 ```bash
 # Claude Code
 claude plugin marketplace add ~/Developer/erict-skills
-claude plugin install erict-skills@erict
+claude plugin install agent-loop@erict
 
 # Codex
 codex plugin marketplace add ~/Developer/erict-skills
-codex plugin add erict-skills
+codex plugin add agent-loop
 ```
 
 Record the exact commands that worked in `docs/development/installing.md`, along with a `README.md` covering what the pack does, the `.agent/config.json` keys, and the two non-configurable safety rules.
@@ -2584,7 +2584,7 @@ In `~/Developer/idle-rpg-mobile`:
 ```bash
 git checkout -b chore/agent-config
 git add .agent/config.json .agent/rules.md .gitignore
-git commit -m "chore: configure erict-skills agent workflow"
+git commit -m "chore: configure agent-loop agent workflow"
 ```
 
 Add a pointer under **Where things are** in `AGENTS.md`:
@@ -2607,14 +2607,14 @@ git commit -m "docs: point AGENTS.md at the agent loop configuration"
 > renumbering briefs already generated for Tasks 10–15.
 
 **Files:**
-- Create: `plugins/erict-skills/lib/portable.sh`
+- Create: `plugins/agent-loop/lib/portable.sh`
 - Create: `.gitattributes`
 - Create: `tests/portable_test.sh`
-- Modify: `plugins/erict-skills/lib/detect.sh` (replace both `stat -f %m` calls)
-- Modify: `plugins/erict-skills/lib/state.sh` (hostname in the lock)
-- Modify: `plugins/erict-skills/lib/env.sh` (source `portable.sh` first, run the dependency check)
-- Modify: `plugins/erict-skills/skills/session-state/SKILL.md` (drop the machine-specific discovery path)
-- Modify: `plugins/erict-skills/lib/plan.sh` (wire `portable_strip_cr` into `plan_next_text` —
+- Modify: `plugins/agent-loop/lib/detect.sh` (replace both `stat -f %m` calls)
+- Modify: `plugins/agent-loop/lib/state.sh` (hostname in the lock)
+- Modify: `plugins/agent-loop/lib/env.sh` (source `portable.sh` first, run the dependency check)
+- Modify: `plugins/agent-loop/skills/session-state/SKILL.md` (drop the machine-specific discovery path)
+- Modify: `plugins/agent-loop/lib/plan.sh` (wire `portable_strip_cr` into `plan_next_text` —
   this is `portable_strip_cr`'s one production call site; without it the helper
   is defined and unit-tested but never actually used)
 - Modify: `tests/plan_test.sh` (source `portable.sh`; add CRLF regression tests)
@@ -2641,7 +2641,7 @@ The pack is bash; that is the honest boundary and the README must say so.
 
 ```bash
 #!/bin/bash
-. "$ERICT_LIB/portable.sh"
+. "$AGENT_LOOP_LIB/portable.sh"
 
 test_portable_mtime_returns_an_epoch_integer() {
   local repo f now
@@ -2734,7 +2734,7 @@ Expected: FAIL — `portable.sh: No such file or directory`
 
 - [ ] **Step 3: Write minimal implementation**
 
-`plugins/erict-skills/lib/portable.sh`:
+`plugins/agent-loop/lib/portable.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -2760,7 +2760,7 @@ portable_require() {
     command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
   done
   if [ -n "$missing" ]; then
-    printf 'erict-skills requires these tools on PATH, and they are missing:%s\n' "$missing" >&2
+    printf 'agent-loop requires these tools on PATH, and they are missing:%s\n' "$missing" >&2
     printf 'On macOS: brew install jq. On Debian/Ubuntu: apt-get install jq.\n' >&2
     printf 'On Windows use Git Bash or WSL; PowerShell and cmd are not supported.\n' >&2
     return 1
@@ -2794,7 +2794,7 @@ portable_strip_cr() {
 *.json text eol=lf
 ```
 
-In `plugins/erict-skills/lib/detect.sh`, replace both occurrences of
+In `plugins/agent-loop/lib/detect.sh`, replace both occurrences of
 
 ```bash
 mtime="$(stat -f %m "$f" 2>/dev/null || echo 0)"
@@ -2808,7 +2808,7 @@ mtime="$(portable_mtime "$f" 2>/dev/null)" || mtime=0
 
 (the first occurrence uses `"$repo/$f"`; keep its path expression unchanged).
 
-In `plugins/erict-skills/lib/state.sh`, add `host` to the frontmatter written by
+In `plugins/agent-loop/lib/state.sh`, add `host` to the frontmatter written by
 `state_write`, immediately after the `engine` line:
 
 ```bash
@@ -2832,7 +2832,7 @@ check, so a different engine holding the file from another host refuses rather
 than testing a meaningless local pid. This is what makes the lock correct on a
 cloud-synced worktree.
 
-In `plugins/erict-skills/lib/env.sh`, source `portable.sh` **first** and run the
+In `plugins/agent-loop/lib/env.sh`, source `portable.sh` **first** and run the
 dependency check before anything else can call `cfg_get`:
 
 ```bash
@@ -2840,10 +2840,10 @@ dependency check before anything else can call `cfg_get`:
   portable_require || return 1
 ```
 
-In `plugins/erict-skills/skills/session-state/SKILL.md`, drop
+In `plugins/agent-loop/skills/session-state/SKILL.md`, drop
 `~/Developer/erict-skills` from the discovery `find`, leaving `~/.claude/plugins`
 and `~/.codex/plugins`. A developer working from a local checkout can export
-`ERICT_LIB` themselves; a machine-specific path does not belong in a
+`AGENT_LOOP_LIB` themselves; a machine-specific path does not belong in a
 distributable pack.
 
 `portable_strip_cr` needs a caller, or the CRLF capability this task claims
@@ -2851,7 +2851,7 @@ does not exist. `plan_next_text` is the one reader whose output escapes into
 another file: the session-state skill records it verbatim into
 `.agent/state.md`'s `next_step` field, so a trailing `\r` from a
 CRLF-checked-out plan would ride straight into the cursor file. In
-`plugins/erict-skills/lib/plan.sh`, read the plan through `portable_strip_cr`
+`plugins/agent-loop/lib/plan.sh`, read the plan through `portable_strip_cr`
 before extracting the line:
 
 ```bash
@@ -2869,7 +2869,7 @@ plan_next_text() {
 
 This creates an ordering dependency: `plan.sh` now needs `portable.sh` sourced
 first. `env.sh` already sources `portable.sh` before everything else, so this
-holds at runtime; `tests/plan_test.sh` needs `. "$ERICT_LIB/portable.sh"`
+holds at runtime; `tests/plan_test.sh` needs `. "$AGENT_LOOP_LIB/portable.sh"`
 added alongside its existing `config.sh`/`plan.sh` sourcing for the same
 reason.
 
@@ -2887,10 +2887,10 @@ Expected: PASS — tally grows, `0 failed`
 - [ ] **Step 5: Commit**
 
 ```bash
-git add plugins/erict-skills/lib/portable.sh plugins/erict-skills/lib/detect.sh \
-  plugins/erict-skills/lib/state.sh plugins/erict-skills/lib/env.sh \
-  plugins/erict-skills/lib/plan.sh \
-  plugins/erict-skills/skills/session-state/SKILL.md .gitattributes \
+git add plugins/agent-loop/lib/portable.sh plugins/agent-loop/lib/detect.sh \
+  plugins/agent-loop/lib/state.sh plugins/agent-loop/lib/env.sh \
+  plugins/agent-loop/lib/plan.sh \
+  plugins/agent-loop/skills/session-state/SKILL.md .gitattributes \
   tests/portable_test.sh tests/plan_test.sh
 git commit -m "feat: make the pack portable across macOS, Linux, Git Bash, and synced folders"
 ```
@@ -2910,11 +2910,11 @@ helpers (three greps instead of loading a 2,700-line plan into context each
 `/status`). The rest is cheaper and safer as prose.
 
 **Files:**
-- Delete: `plugins/erict-skills/lib/slice.sh`, `tests/slice_test.sh`
-- Modify: `plugins/erict-skills/lib/plan.sh` (remove `plan_tick`)
-- Modify: `plugins/erict-skills/lib/state.sh` (replace `state_write` with `state_stamp`)
-- Modify: `plugins/erict-skills/lib/env.sh` (stop sourcing `slice.sh`)
-- Modify: `plugins/erict-skills/skills/session-state/SKILL.md` (prose replaces the removed calls)
+- Delete: `plugins/agent-loop/lib/slice.sh`, `tests/slice_test.sh`
+- Modify: `plugins/agent-loop/lib/plan.sh` (remove `plan_tick`)
+- Modify: `plugins/agent-loop/lib/state.sh` (replace `state_write` with `state_stamp`)
+- Modify: `plugins/agent-loop/lib/env.sh` (stop sourcing `slice.sh`)
+- Modify: `plugins/agent-loop/skills/session-state/SKILL.md` (prose replaces the removed calls)
 - Modify: `tests/plan_test.sh`, `tests/state_test.sh`, `tests/env_test.sh`, `tests/portable_test.sh`
 
 **Interfaces:**
@@ -2988,7 +2988,7 @@ because the functions still exist.
 
 - [ ] **Step 3: Write minimal implementation**
 
-Replace `state_write` in `plugins/erict-skills/lib/state.sh` with:
+Replace `state_write` in `plugins/agent-loop/lib/state.sh` with:
 
 ```bash
 state_stamp() {
@@ -3035,7 +3035,7 @@ here and must not be papered over.
 - [ ] **Step 6: Commit**
 
 ```bash
-git rm plugins/erict-skills/lib/slice.sh tests/slice_test.sh
+git rm plugins/agent-loop/lib/slice.sh tests/slice_test.sh
 git add -A
 git commit -m "refactor: keep shell for gates, vcs and plan reads; move the rest to prose"
 ```

@@ -1,7 +1,7 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/portable.sh"
-. "$ERICT_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/portable.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
 
 test_detect_plan_finds_todo_in_bare_repo() {
   AGENT_REPO="$(mktemp_repo)"

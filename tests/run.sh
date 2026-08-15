@@ -1,7 +1,7 @@
 #!/bin/bash
 set -u
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-export ERICT_LIB="$ROOT/plugins/erict-skills/lib"
+export AGENT_LOOP_LIB="$ROOT/plugins/agent-loop/lib"
 . "$ROOT/tests/helpers.sh"
 
 for file in "$ROOT"/tests/*_test.sh; do

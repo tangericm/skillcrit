@@ -1,8 +1,8 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/detect.sh"
-. "$ERICT_LIB/state.sh"
-. "$ERICT_LIB/portable.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/detect.sh"
+. "$AGENT_LOOP_LIB/state.sh"
+. "$AGENT_LOOP_LIB/portable.sh"
 
 test_portable_mtime_returns_an_epoch_integer() {
   local repo f now

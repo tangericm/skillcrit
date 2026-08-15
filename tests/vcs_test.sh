@@ -1,6 +1,6 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/vcs.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/vcs.sh"
 
 test_default_branch_is_main() {
   AGENT_REPO="$(mktemp_repo)"

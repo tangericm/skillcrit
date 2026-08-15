@@ -1,7 +1,7 @@
 #!/bin/bash
-. "$ERICT_LIB/config.sh"
-. "$ERICT_LIB/portable.sh"
-. "$ERICT_LIB/plan.sh"
+. "$AGENT_LOOP_LIB/config.sh"
+. "$AGENT_LOOP_LIB/portable.sh"
+. "$AGENT_LOOP_LIB/plan.sh"
 
 _fixture_plan() {
   AGENT_REPO="$(mktemp_repo)"
