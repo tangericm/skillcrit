@@ -88,8 +88,10 @@ test_plan_next_line_and_counts_are_unaffected_by_crlf() {
   # plan_next_line and plan_counts use unanchored regexes ("- \[ \]" with no
   # $ at the end), so a trailing \r never changes matching or counting. This
   # pins that as a tested fact rather than an assumption, so stripping is
-  # deliberately NOT added to plan_next_line, plan_counts, or
-  # _detect_has_open_task for symmetry's sake.
+  # deliberately NOT added to plan_next_line or plan_counts for symmetry's
+  # sake. detect.sh's _detect_has_open_task shares the same unanchored
+  # property and is pinned the same way, through its real caller, in
+  # tests/detect_test.sh (test_detect_plan_selects_a_crlf_plan).
   local p; p="$(_fixture_plan_crlf)"
   assert_eq "4" "$(plan_next_line "$p")" "line number unaffected by a trailing \\r"
   assert_eq "1 3" "$(plan_counts "$p")" "counts unaffected by a trailing \\r"

@@ -1,5 +1,6 @@
 #!/bin/bash
 . "$ERICT_LIB/config.sh"
+. "$ERICT_LIB/portable.sh"
 . "$ERICT_LIB/detect.sh"
 
 test_detect_plan_finds_todo_in_bare_repo() {
@@ -30,6 +31,16 @@ test_detect_plan_honours_configured_active() {
   printf -- '- [ ] pinned\n' > "$AGENT_REPO/pinned.md"
   printf '{"plan":{"active":"pinned.md"}}\n' > "$AGENT_REPO/.agent/config.json"
   assert_eq "$AGENT_REPO/pinned.md" "$(detect_plan)" "config pin wins"
+}
+
+test_detect_plan_selects_a_crlf_plan() {
+  # _detect_has_open_task's grep is unanchored at end-of-line
+  # (^[[:space:]]*- \[ \], no trailing $), so a CRLF-checked-out plan's
+  # trailing \r never hides an open task from detect_plan. Exercised
+  # through the real caller, not the regex in isolation.
+  AGENT_REPO="$(mktemp_repo)"
+  printf -- '# Plan\r\n\r\n- [ ] first\r\n' > "$AGENT_REPO/TODO.md"
+  assert_eq "$AGENT_REPO/TODO.md" "$(detect_plan)" "CRLF plan is still detected as open"
 }
 
 test_detect_gate_reads_npm_test_script() {
