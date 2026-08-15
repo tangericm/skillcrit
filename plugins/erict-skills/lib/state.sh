@@ -38,13 +38,19 @@ state_section() {
 }
 
 state_lock_ok() {
-  local file holder pid
+  local file holder pid holder_host
   file="$(state_path)"
   [ -f "$file" ] || return 0
   holder="$(state_get engine)"
   pid="$(state_get pid)"
   [ -z "$holder" ] && return 0
   [ "$holder" = "${AGENT_ENGINE:-unknown}" ] && return 0
+  holder_host="$(state_get host)"
+  if [ -n "$holder_host" ] && [ "$holder_host" != "$(portable_host)" ]; then
+    printf 'refusing: %s holds %s from host %s; liveness cannot be checked across machines\n' \
+      "$holder" "$file" "$holder_host" >&2
+    return 1
+  fi
   [ -z "$pid" ] && return 0
   if kill -0 "$pid" 2>/dev/null; then
     printf 'refusing: %s (pid %s) holds %s\n' "$holder" "$pid" "$file" >&2
@@ -104,6 +110,7 @@ state_write() {
     printf 'worktree: %s\n' "${AGENT_REPO:-.}"
     printf 'last_green: %s\n' "$last_green"
     printf 'engine: %s\n' "${AGENT_ENGINE:-unknown}"
+    printf 'host: %s\n' "$(portable_host)"
     printf 'pid: %s\n' "$$"
     printf 'updated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf -- '---\n\n'

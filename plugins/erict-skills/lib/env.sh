@@ -5,6 +5,8 @@ erict_env() {
   local engine="${1:-unknown}" here
   here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   AGENT_ENGINE="$engine"
+  . "$here/portable.sh"
+  portable_require || return 1
   AGENT_REPO="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
   export AGENT_ENGINE AGENT_REPO
   . "$here/config.sh"

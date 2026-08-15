@@ -16,7 +16,7 @@ description: >
 Every command begins by sourcing the library. Run this first, always:
 
 ```bash
-ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
+ERICT_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
   -path '*erict-skills*' -name env.sh 2>/dev/null | head -1)")"
 [ -n "$ERICT_LIB" ] || { echo "erict-skills lib not found"; exit 1; }
 . "$ERICT_LIB/env.sh" && erict_env claude   # or: erict_env codex

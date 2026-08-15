@@ -23,7 +23,7 @@ detect_plan() {
   if [ -n "$glob" ]; then
     for f in $(cd "$repo" 2>/dev/null && ls -1 $glob 2>/dev/null); do
       _detect_has_open_task "$repo/$f" || continue
-      mtime="$(stat -f %m "$repo/$f" 2>/dev/null || echo 0)"
+      mtime="$(portable_mtime "$repo/$f" 2>/dev/null)" || mtime=0
       if [ "$mtime" -ge "$newest_mtime" ]; then newest="$repo/$f"; newest_mtime="$mtime"; fi
     done
     [ -n "$newest" ] && { printf '%s' "$newest"; return 0; }
@@ -40,7 +40,7 @@ detect_plan() {
     for f in $pattern; do
       [ -f "$f" ] || continue
       _detect_has_open_task "$f" || continue
-      mtime="$(stat -f %m "$f" 2>/dev/null || echo 0)"
+      mtime="$(portable_mtime "$f" 2>/dev/null)" || mtime=0
       if [ "$mtime" -ge "$newest_mtime" ]; then newest="$f"; newest_mtime="$mtime"; fi
     done
     [ -n "$newest" ] && { printf '%s' "$newest"; return 0; }
