@@ -1600,8 +1600,24 @@ Execute exactly one task, then stop.
 3. **Implement** following the project's testing discipline from the rules file.
 4. **Gate.** `gate_level_for <changed files>` then `gate_run <level>`.
 5. **Commit** on green with `vcs_commit`.
-6. **Record.** `plan_tick`, write the project's task report if it defines one,
-   then `state_write` with a fresh next step and working notes.
+6. **Record.** `plan_tick "$plan" "$line"`, where `$line` is the line number
+   `plan_next_line "$plan"` gave you in step 1 — marks the task done. Write
+   the project's task report if it defines one. Then call `state_write` with
+   all eight positional arguments, in this fixed order. The function performs
+   no validation: a transposed or short call corrupts the cursor silently
+   instead of failing.
+
+   ```bash
+   state_write \
+     "$plan" \                          # the active plan path, from detect_plan
+     "$next_task_number" \              # the task you just completed, plus one
+     "$total_tasks" \                   # plan_counts's SECOND field ("<done> <total>")
+     "$(vcs_current_branch)" \
+     "$(git rev-parse --short HEAD)" \  # the commit your gate just proved green
+     "$next_step" \                     # one imperative sentence
+     "$blockers" \                      # or "none"
+     "$notes"                           # capped working notes
+   ```
 7. **Stop.** Report in under ten lines.
 
 Write the cursor after *every* task, not at the end of the session. There is no
@@ -1628,8 +1644,11 @@ When `detect_plan` is empty, run `/plan` **and then stop** — do not roll strai
 into unattended execution of a plan the user has not seen. `/auto` executes
 approved intent; a plan written seconds ago by the same loop is not that.
 
-On halt: `state_write`, append a halt record to `.agent/journal.md`, then produce
-a `/handoff`. Report one summary, not per-task narration.
+On halt: call `state_write` with the same eight positional arguments as
+`/next` step 6 — plan, task, total, branch, last_green, next_step, blockers,
+notes, in that fixed order — then append a halt record to
+`.agent/journal.md`, then produce a `/handoff`. Report one summary, not
+per-task narration.
 
 ## /handoff [parallel]
 
