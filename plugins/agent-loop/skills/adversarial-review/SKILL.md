@@ -64,7 +64,12 @@ every command guarantees the counterpart is always the other engine.
   does not resolve once the reviewer's working directory is the target repo,
   not the plugin.
 
-Write the brief to a temp file. Both legs receive the same brief.
+Write the brief to a temp file. Both legs receive the same brief. Also pick
+two absolute output-file paths now — one for this engine's leg, one for the
+counterpart leg's — and hold both as literal text for the rest of this
+review. Step 3 needs both; no shell variable survives between Bash tool
+calls, so a path only kept in `$this_engine_out` is gone by the time step 3
+runs.
 
 ## 2. Run both legs
 
@@ -79,11 +84,17 @@ following criteria — find why it does not."
     host agent performs the refutation itself, following
     `agents/refuter.md`'s instructions inline against the same brief, and
     produces the same output contract.
+  - Either way, the result is a JSON findings array in the response. Use the
+    Write tool to save it verbatim to this engine's output path chosen in
+    step 1.
 - **The counterpart leg** — run
   `<agent-loop> claude adv_counterpart_cmd claude <prompt> <out>` (substituting
-  your own engine, `claude` or `codex`, in both places) with the exit-gate-skeptic
-  lens: does this satisfy the criteria, or merely satisfy the tests? This
-  echoes a shell command; run the command it echoes as a separate step.
+  your own engine, `claude` or `codex`, in both places, and the literal
+  prompt-file and counterpart-output paths chosen in step 1 for `<prompt>`
+  and `<out>`) with the exit-gate-skeptic lens: does this satisfy the
+  criteria, or merely satisfy the tests? This echoes a shell command whose
+  `<out>` argument is the counterpart-output path you chose; run the
+  command it echoes as a separate step — it writes that file itself.
 
 Both legs are read-only, but not enforced identically. The Codex counterpart
 is sandboxed read-only by `-s read-only`. The Claude-side legs — the local
@@ -95,9 +106,23 @@ tree regardless of engine.
 
 ## 3. Reconcile
 
+`adv_reconcile` takes each leg's output file paired with an explicit engine
+label for who produced it — never argument position. This document runs
+under either host, and "the first file is always claude's" is exactly the
+assumption that silently swapped every `claude_only`/`codex_only` bucket
+(and every per-finding `claude`/`codex` key) when this ran under Codex.
+Argument order is always *(this engine, counterpart)*; only the label words
+change with the host:
+
 ```bash
-<agent-loop> claude adv_reconcile "$this_engine_out" "$counterpart_out"
+<agent-loop> claude adv_reconcile <this-engine output path> claude <counterpart output path> codex
 ```
+
+Substitute the two literal output paths chosen in step 1 — no shell
+variable survives between Bash tool calls. Under Codex this becomes
+`<agent-loop> codex adv_reconcile <this-engine output path> codex <counterpart output path> claude`:
+the file/label pairing always names the engine that actually produced that
+file, never the engine currently running this document.
 
 Report in exactly these buckets:
 

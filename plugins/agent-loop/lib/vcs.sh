@@ -10,8 +10,14 @@ vcs_default_branch() {
   local ref explicit
   explicit="$(cfg_get vcs.default_branch '')"
   if [ -n "$explicit" ]; then
-    printf '%s' "$explicit"
-    return 0
+    if _git show-ref --verify --quiet "refs/heads/$explicit" \
+       || _git show-ref --verify --quiet "refs/remotes/origin/$explicit"; then
+      printf '%s' "$explicit"
+      return 0
+    fi
+    printf 'vcs.default_branch is set to "%s" but no such branch exists (checked refs/heads/%s and refs/remotes/origin/%s)\n' \
+      "$explicit" "$explicit" "$explicit" >&2
+    return 1
   fi
   ref="$(_git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null)"
   if [ -n "$ref" ]; then
@@ -20,6 +26,7 @@ vcs_default_branch() {
   fi
   if _git show-ref --verify --quiet refs/heads/main; then printf 'main'; return 0; fi
   if _git show-ref --verify --quiet refs/heads/master; then printf 'master'; return 0; fi
+  return 1
 }
 
 vcs_current_branch() {
@@ -52,15 +59,22 @@ vcs_preflight() {
 }
 
 vcs_can_commit() {
-  local current default
+  local current default rc explicit
   current="$(vcs_current_branch)"
   default="$(vcs_default_branch)"
+  rc=$?
   if [ "$current" = "HEAD" ]; then
     printf 'refusing to commit: repository is in detached HEAD state\n' >&2
     return 1
   fi
-  if [ -z "$default" ]; then
-    printf 'refusing to commit: default branch is undeterminable. Set vcs.default_branch in .agent/config.json\n' >&2
+  if [ $rc -ne 0 ] || [ -z "$default" ]; then
+    explicit="$(cfg_get vcs.default_branch '')"
+    if [ -n "$explicit" ]; then
+      printf 'refusing to commit: vcs.default_branch is set to "%s" but that branch does not exist. Fix the config or remove the override; refusing to fall through to autodetection with an unproven setting.\n' \
+        "$explicit" >&2
+    else
+      printf 'refusing to commit: default branch is undeterminable. Set vcs.default_branch in .agent/config.json\n' >&2
+    fi
     return 1
   fi
   if [ "$current" = "$default" ]; then

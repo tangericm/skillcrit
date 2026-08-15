@@ -82,3 +82,15 @@ test_default_branch_override_unblocks_commit() {
   vcs_can_commit
   assert_eq "0" "$?" "explicit default_branch override permits commit"
 }
+
+test_default_branch_naming_nonexistent_ref_refuses_commit() {
+  # Reproduces the reviewer's finding: a configured vcs.default_branch that
+  # names no real ref must not silently disable the commit refusal. HEAD is
+  # on "main", the repo's real default branch, and default_branch is
+  # misconfigured to "trunk" (which does not exist) -- vcs_can_commit must
+  # still refuse, not fall through to treating main as a non-default branch.
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"vcs":{"default_branch":"trunk"}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_fails "configured default_branch naming no real ref refuses commit on the real default branch" vcs_can_commit
+}

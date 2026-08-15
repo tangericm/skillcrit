@@ -12,8 +12,12 @@ test_state_stamp_emits_machine_fields() {
   assert_contains "$out" "branch: main" "branch present"
   assert_contains "$out" "engine: claude" "engine present"
   assert_contains "$out" "host: $(portable_host)" "host present"
-  assert_eq "1" "$(printf '%s\n' "$out" | grep -cE '^pid: [0-9]+$')" "pid is numeric"
   assert_eq "1" "$(printf '%s\n' "$out" | grep -cE '^updated: [0-9]{4}-')" "updated is a timestamp"
+  # Fix 7: the pid mechanism is deleted, not just unused. state_stamp's pid
+  # was always the ephemeral bin/agent-loop process's own pid, already
+  # exited by the time anyone could read it back -- a claimed protection
+  # that never held. Guard against it silently reappearing.
+  assert_eq "0" "$(printf '%s\n' "$out" | grep -cE '^pid: ')" "pid is no longer stamped"
 }
 
 test_state_stamp_writes_no_file() {
@@ -27,8 +31,8 @@ test_state_get_still_reads_a_model_written_file() {
   AGENT_REPO="$(mktemp_repo)"
   AGENT_ENGINE=claude
   mkdir -p "$AGENT_REPO/.agent"
-  printf -- '---\nplan: docs/p.md\ntask: 4\nhost: %s\nengine: claude\npid: %s\n---\n\n## Next concrete step\nDo the thing\n' \
-    "$(portable_host)" "$$" > "$(state_path)"
+  printf -- '---\nplan: docs/p.md\ntask: 4\nhost: %s\nengine: claude\n---\n\n## Next concrete step\nDo the thing\n' \
+    "$(portable_host)" > "$(state_path)"
   assert_eq "docs/p.md" "$(state_get plan)" "reads a hand-written cursor"
   assert_eq "Do the thing" "$(state_section 'Next concrete step')" "reads a hand-written section"
   state_lock_ok
@@ -42,23 +46,36 @@ test_state_lock_ok_when_no_file() {
   assert_eq "0" "$?" "no file means unlocked"
 }
 
-test_state_lock_refuses_other_live_engine() {
+test_state_lock_allows_other_engine_same_host() {
+  # Fix 7: state_lock_ok's pid check was vacuous by construction. Every
+  # Bash tool call is a fresh, already-exited process by the time anyone
+  # reads the stamped state back (see bin/agent-loop), so a stamped pid
+  # can never match a live process in production -- kill -0 always saw a
+  # dead pid and always returned "safe to write." The old version of this
+  # test only "passed" because it stamped the long-lived test-harness pid
+  # ($$), a state the real runtime cannot produce. The pid mechanism is
+  # deleted rather than kept as a claimed protection that never held:
+  # within a single host, .agent/state.md is last-writer-wins, so a
+  # different engine on the same host does not block the write.
   AGENT_REPO="$(mktemp_repo)"
   AGENT_ENGINE=claude
   mkdir -p "$AGENT_REPO/.agent"
-  printf -- '---\nengine: codex\nhost: %s\npid: %s\n---\n\n## Next concrete step\nstep\n' \
-    "$(portable_host)" "$$" > "$(state_path)"
-  assert_fails "other live engine blocks write" state_lock_ok
-}
-
-test_state_lock_ignores_dead_pid() {
-  AGENT_REPO="$(mktemp_repo)"
-  AGENT_ENGINE=claude
-  mkdir -p "$AGENT_REPO/.agent"
-  printf -- '---\nengine: codex\nhost: %s\npid: 99999999\n---\n\n## Next concrete step\nstep\n' \
+  printf -- '---\nengine: codex\nhost: %s\n---\n\n## Next concrete step\nstep\n' \
     "$(portable_host)" > "$(state_path)"
   state_lock_ok
-  assert_eq "0" "$?" "dead pid does not block"
+  assert_eq "0" "$?" "other engine on the same host does not block (last-writer-wins within a host)"
+}
+
+test_state_lock_refuses_other_host() {
+  # The one protection Fix 7 keeps: a different host's claim can never be
+  # checked for liveness at all (no local pid, no local process table to
+  # ask), so it refuses outright rather than guessing.
+  AGENT_REPO="$(mktemp_repo)"
+  AGENT_ENGINE=claude
+  mkdir -p "$AGENT_REPO/.agent"
+  printf -- '---\nengine: codex\nhost: some-other-machine\n---\n\n## Next concrete step\nstep\n' \
+    > "$(state_path)"
+  assert_fails "a different host's state blocks the write" state_lock_ok
 }
 
 test_state_preserves_blank_lines_in_notes() {

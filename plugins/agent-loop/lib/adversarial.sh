@@ -21,9 +21,35 @@ adv_key() {
   printf '%s' "$1" | jq -r '"\(.file):\(.line):\(.category)"'
 }
 
+# adv_reconcile <self_file> <self_engine> <counterpart_file> <counterpart_engine>
+#
+# Labels are explicit arguments, never inferred from argument position.
+# Position-based labeling ("first file is always claude's") is what caused
+# every single-engine bucket and per-finding key to invert when this ran
+# under a Codex host: the caller's own leg lands wherever it lands
+# positionally, and only the label argument says whose findings are whose.
 adv_reconcile() {
-  local a="$1" b="$2"
-  jq -n --slurpfile A "$a" --slurpfile B "$b" '
+  local self="$1" self_engine="$2" cp="$3" cp_engine="$4"
+  case "$self_engine" in
+    claude|codex) ;;
+    *)
+      printf 'adv_reconcile: unknown engine label: %s (expected claude or codex)\n' "$self_engine" >&2
+      return 1
+      ;;
+  esac
+  case "$cp_engine" in
+    claude|codex) ;;
+    *)
+      printf 'adv_reconcile: unknown engine label: %s (expected claude or codex)\n' "$cp_engine" >&2
+      return 1
+      ;;
+  esac
+  if [ "$self_engine" = "$cp_engine" ]; then
+    printf 'adv_reconcile: both legs are labeled %s; refusing to reconcile a review against itself\n' "$self_engine" >&2
+    return 1
+  fi
+  jq -n --slurpfile SELF "$self" --slurpfile CP "$cp" \
+        --arg self_engine "$self_engine" --arg cp_engine "$cp_engine" '
     def require_fields:
       if (type == "object")
          and has("file") and has("line") and has("category") and has("refuted")
@@ -31,19 +57,19 @@ adv_reconcile() {
       else error("finding missing a required field (file, line, category, refuted): \(tojson)")
       end;
     def key: "\(.file):\(.line):\(.category)";
-    ($A[0] // [] | map(require_fields)) as $ca | ($B[0] // [] | map(require_fields)) as $cb |
-    ($ca | map({ (key): . }) | add // {}) as $ma |
-    ($cb | map({ (key): . }) | add // {}) as $mb |
-    ($ma | keys) as $ka | ($mb | keys) as $kb |
+    ($SELF[0] // [] | map(require_fields)) as $cs | ($CP[0] // [] | map(require_fields)) as $cc |
+    ($cs | map({ (key): . }) | add // {}) as $ms |
+    ($cc | map({ (key): . }) | add // {}) as $mc |
+    ($ms | keys) as $ks | ($mc | keys) as $kc |
     {
-      agreed: [ $ka[] | select($mb[.] != null)
-                | select($ma[.].refuted == $mb[.].refuted)
-                | { key: ., claude: $ma[.], codex: $mb[.] } ],
-      contradictory: [ $ka[] | select($mb[.] != null)
-                       | select($ma[.].refuted != $mb[.].refuted)
-                       | { key: ., claude: $ma[.], codex: $mb[.] } ],
-      claude_only: [ $ka[] | select($mb[.] == null) | $ma[.] ],
-      codex_only: [ $kb[] | select($ma[.] == null) | $mb[.] ]
+      agreed: [ $ks[] | select($mc[.] != null)
+                | select($ms[.].refuted == $mc[.].refuted)
+                | { key: ., ($self_engine): $ms[.], ($cp_engine): $mc[.] } ],
+      contradictory: [ $ks[] | select($mc[.] != null)
+                       | select($ms[.].refuted != $mc[.].refuted)
+                       | { key: ., ($self_engine): $ms[.], ($cp_engine): $mc[.] } ],
+      ($self_engine + "_only"): [ $ks[] | select($mc[.] == null) | $ms[.] ],
+      ($cp_engine + "_only"): [ $kc[] | select($ms[.] == null) | $mc[.] ]
     }
   '
 }

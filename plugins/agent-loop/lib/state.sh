@@ -38,22 +38,23 @@ state_section() {
 }
 
 state_lock_ok() {
-  local file holder pid holder_host
+  # There is no liveness signal this runtime can produce: every Bash tool
+  # call is a fresh, already-exited process by the time anyone reads the
+  # stamped state back (see bin/agent-loop), so a stamped pid can never be
+  # checked against a live process on the same host. The only fact worth
+  # checking is whether the file was last written by a *different host*,
+  # where even a live pid would be meaningless to compare against ours.
+  # Within a single host, .agent/state.md is last-writer-wins.
+  local file holder holder_host
   file="$(state_path)"
   [ -f "$file" ] || return 0
   holder="$(state_get engine)"
-  pid="$(state_get pid)"
   [ -z "$holder" ] && return 0
   [ "$holder" = "${AGENT_ENGINE:-unknown}" ] && return 0
   holder_host="$(state_get host)"
   if [ -n "$holder_host" ] && [ "$holder_host" != "$(portable_host)" ]; then
     printf 'refusing: %s holds %s from host %s; liveness cannot be checked across machines\n' \
       "$holder" "$file" "$holder_host" >&2
-    return 1
-  fi
-  [ -z "$pid" ] && return 0
-  if kill -0 "$pid" 2>/dev/null; then
-    printf 'refusing: %s (pid %s) holds %s\n' "$holder" "$pid" "$file" >&2
     return 1
   fi
   return 0
@@ -63,7 +64,6 @@ state_stamp() {
   printf 'branch: %s\n' "$(vcs_current_branch)"
   printf 'last_green: %s\n' "$(git -C "${AGENT_REPO:-.}" rev-parse --short HEAD 2>/dev/null)"
   printf 'engine: %s\n' "${AGENT_ENGINE:-unknown}"
-  printf 'pid: %s\n' "$$"
   printf 'host: %s\n' "$(portable_host)"
   printf 'updated: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
