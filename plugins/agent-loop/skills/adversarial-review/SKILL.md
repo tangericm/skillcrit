@@ -23,6 +23,13 @@ adv_check_counterpart "$AGENT_ENGINE" || exit 1
 wearing this command's name is worse than no review, because it claims a
 confidence it did not earn.
 
+**Engine identity is always passed explicitly, never sniffed.** `AGENT_ENGINE`
+comes only from the `erict_env claude` / `erict_env codex` call above, and
+both `adv_check_counterpart` and `adv_counterpart_cmd` take it as an
+argument. An engine that inferred its own identity from the environment
+could end up reviewing its own work by accident; passing it explicitly
+guarantees the counterpart is always the other engine.
+
 ## 1. Assemble the brief
 
 - Target diff: `git diff "$(git merge-base HEAD "$(vcs_default_branch)")"...HEAD`
@@ -30,6 +37,9 @@ confidence it did not earn.
   whole plan when it declares none.
 - Rules: `$(cfg_get review.rules '.agent/rules.md')`, falling back to
   `AGENTS.md`, then `CLAUDE.md`.
+- Schema: `$AGENT_LOOP_LIB/../schema/findings.schema.json` — interpolate this
+  absolute path into the brief text. A bare relative path does not resolve
+  once the reviewer's working directory is the target repo, not the plugin.
 
 Write the brief to a temp file. Both legs receive the same brief.
 
@@ -38,13 +48,25 @@ Write the brief to a temp file. Both legs receive the same brief.
 Instruct both to **refute, not assess**: "this work claims to satisfy the
 following criteria — find why it does not."
 
-- **This engine's leg** — dispatch the `refuter` agent with the invariant and
-  rule-violation lens.
+- **This engine's leg:**
+  - **Under Claude**, dispatch the `refuter` subagent (`agents/refuter.md`)
+    with the brief, using the invariant and rule-violation lens.
+  - **Under Codex**, no subagent mechanism exists —
+    `.codex-plugin/plugin.json` declares only `skills`, not `agents`. The
+    host agent performs the refutation itself, following
+    `agents/refuter.md`'s instructions inline against the same brief, and
+    produces the same output contract.
 - **The counterpart leg** — run `adv_counterpart_cmd "$AGENT_ENGINE" <prompt> <out>`
   with the exit-gate-skeptic lens: does this satisfy the criteria, or merely
   satisfy the tests?
 
-Both legs run read-only. Neither may edit the working tree.
+Both legs are read-only, but not enforced identically. The Codex counterpart
+is sandboxed read-only by `-s read-only`. The Claude-side legs — the local
+`refuter` subagent and the `claude -p` counterpart — have no equivalent
+sandbox flag; they are constrained by tool restriction
+(`agents/refuter.md` grants `Read, Grep, Glob` only, never `Bash`) and by
+instruction, not by a technical sandbox. Neither leg may edit the working
+tree regardless of engine.
 
 ## 3. Reconcile
 

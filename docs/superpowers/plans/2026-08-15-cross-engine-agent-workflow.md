@@ -2249,25 +2249,31 @@ git commit -m "feat: route adversarial review to the counterpart engine"
 
 - [ ] **Step 1: Write the failing test**
 
-Replace `test_erict_env_exposes_all_functions` in `tests/env_test.sh`:
+Replace `test_erict_env_exposes_all_functions` in `tests/env_test.sh`. Note:
+a later refactor deleted `state_write`, `plan_tick`, `slice_disjoint`, and
+`slice_module` — the brief originally named some of those; use this
+function list instead:
 
 ```bash
 test_erict_env_exposes_all_functions() {
   local repo; repo="$(mktemp_repo)"
   local out
-  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env claude; type -t cfg_get state_write plan_tick gate_run vcs_can_commit slice_disjoint adv_reconcile adv_counterpart | tr '\n' ' '")"
-  assert_eq "function function function function function function function function " "$out" "all modules sourced"
+  out="$(cd "$repo" && bash -c ". \"$AGENT_LOOP_LIB/env.sh\"; erict_env claude; type -t cfg_get state_stamp gate_run vcs_can_commit portable_host adv_reconcile adv_counterpart | tr '\n' ' '")"
+  assert_eq "function function function function function function function " "$out" "all modules sourced"
 }
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `bash tests/run.sh`
-Expected: FAIL — `adv_reconcile` reports empty instead of `function`
+Expected: FAIL — `adv_reconcile` and `adv_counterpart` report empty instead of
+`function`
 
 - [ ] **Step 3: Write minimal implementation**
 
-Add to `erict_env` in `plugins/agent-loop/lib/env.sh`, after the `slice.sh` line:
+Add to `erict_env` in `plugins/agent-loop/lib/env.sh`. There is no `slice.sh`
+line to anchor on — that module was removed in an earlier task — so add it
+as the last source line, after `vcs.sh`:
 
 ```bash
   . "$here/adversarial.sh"
@@ -2279,7 +2285,7 @@ Add to `erict_env` in `plugins/agent-loop/lib/env.sh`, after the `slice.sh` line
 ---
 name: refuter
 description: Adversarial reviewer that hunts for reasons work does NOT satisfy its stated criteria. Use only from the adversarial-review skill.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 ---
 
 You are a refuter, not an assessor. You are shown work and the criteria it
@@ -2293,11 +2299,27 @@ leading to a specific wrong outcome. "This could be fragile" is not a finding.
 "Calling advance() twice with the same timestamp double-awards the reward
 because the draw counter is not incremented on the second call" is a finding.
 
-Return a JSON array matching `schema/findings.schema.json`. Nothing else — no
-prose before or after.
+Return a JSON array. Your brief supplies the absolute path to
+`findings.schema.json` — validate against that path, not any relative
+reference. If the brief omits the path, or the file cannot be read, every
+finding must still carry exactly these seven fields: `file` (string), `line`
+(integer), `category` (one of `correctness`, `spec`, `invariant`, `security`,
+`test-gap`), `claim` (string), `evidence` (string), `severity` (one of
+`high`, `medium`, `low`), and `refuted` (boolean). Nothing else in the
+response — no prose before or after.
 ```
 
+No `Bash` in `tools:` — a refuter receives the diff in its brief and needs to
+inspect files, not run commands. This is the only technical read-only
+enforcement on the Claude side; see "Both legs are read-only" below for what
+is and is not enforced on each leg.
+
 `plugins/agent-loop/skills/adversarial-review/SKILL.md`:
+
+The discovery snippet below is copied from `session-state/SKILL.md`'s current
+(post-portability-pass) version, which searches only `~/.claude/plugins
+~/.codex/plugins` — an earlier draft of this snippet included a third path
+(`~/Developer/erict-skills`) that was stale and has been dropped to match.
 
 ```markdown
 ---
@@ -2314,7 +2336,7 @@ description: >
 # Adversarial review
 
 ```bash
-AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins ~/Developer/erict-skills \
+AGENT_LOOP_LIB="$(dirname "$(find ~/.claude/plugins ~/.codex/plugins \
   -path '*agent-loop*' -name env.sh 2>/dev/null | head -1)")"
 [ -n "$AGENT_LOOP_LIB" ] || { echo "agent-loop lib not found"; exit 1; }
 . "$AGENT_LOOP_LIB/env.sh" && erict_env claude   # or: erict_env codex
@@ -2325,6 +2347,13 @@ adv_check_counterpart "$AGENT_ENGINE" || exit 1
 wearing this command's name is worse than no review, because it claims a
 confidence it did not earn.
 
+**Engine identity is always passed explicitly, never sniffed.** `AGENT_ENGINE`
+comes only from the `erict_env claude` / `erict_env codex` call above, and
+both `adv_check_counterpart` and `adv_counterpart_cmd` take it as an
+argument. An engine that inferred its own identity from the environment
+could end up reviewing its own work by accident; passing it explicitly
+guarantees the counterpart is always the other engine.
+
 ## 1. Assemble the brief
 
 - Target diff: `git diff "$(git merge-base HEAD "$(vcs_default_branch)")"...HEAD`
@@ -2332,6 +2361,9 @@ confidence it did not earn.
   whole plan when it declares none.
 - Rules: `$(cfg_get review.rules '.agent/rules.md')`, falling back to
   `AGENTS.md`, then `CLAUDE.md`.
+- Schema: `$AGENT_LOOP_LIB/../schema/findings.schema.json` — interpolate this
+  absolute path into the brief text. A bare relative path does not resolve
+  once the reviewer's working directory is the target repo, not the plugin.
 
 Write the brief to a temp file. Both legs receive the same brief.
 
@@ -2340,13 +2372,25 @@ Write the brief to a temp file. Both legs receive the same brief.
 Instruct both to **refute, not assess**: "this work claims to satisfy the
 following criteria — find why it does not."
 
-- **This engine's leg** — dispatch the `refuter` agent with the invariant and
-  rule-violation lens.
+- **This engine's leg:**
+  - **Under Claude**, dispatch the `refuter` subagent (`agents/refuter.md`)
+    with the brief, using the invariant and rule-violation lens.
+  - **Under Codex**, no subagent mechanism exists —
+    `.codex-plugin/plugin.json` declares only `skills`, not `agents`. The
+    host agent performs the refutation itself, following
+    `agents/refuter.md`'s instructions inline against the same brief, and
+    produces the same output contract.
 - **The counterpart leg** — run `adv_counterpart_cmd "$AGENT_ENGINE" <prompt> <out>`
   with the exit-gate-skeptic lens: does this satisfy the criteria, or merely
   satisfy the tests?
 
-Both legs run read-only. Neither may edit the working tree.
+Both legs are read-only, but not enforced identically. The Codex counterpart
+is sandboxed read-only by `-s read-only`. The Claude-side legs — the local
+`refuter` subagent and the `claude -p` counterpart — have no equivalent
+sandbox flag; they are constrained by tool restriction
+(`agents/refuter.md` grants `Read, Grep, Glob` only, never `Bash`) and by
+instruction, not by a technical sandbox. Neither leg may edit the working
+tree regardless of engine.
 
 ## 3. Reconcile
 
