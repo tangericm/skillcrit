@@ -422,6 +422,14 @@ test_detect_gate_empty_when_nothing_found() {
   AGENT_REPO="$(mktemp_repo)"
   assert_eq "" "$(detect_gate suite)" "bare repo has no gate"
 }
+
+test_detect_gate_honours_an_explicitly_blank_gate() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gates":{"suite":""}}\n' > "$AGENT_REPO/.agent/config.json"
+  printf '{"scripts":{"test":"vitest run"}}\n' > "$AGENT_REPO/package.json"
+  assert_eq "" "$(detect_gate suite)" "blank gate means none, not auto-detect"
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -486,8 +494,11 @@ detect_plan() {
 
 detect_gate() {
   local level="$1" repo="${AGENT_REPO:-.}" configured
-  configured="$(cfg_get "gates.$level" '')"
-  if [ -n "$configured" ]; then
+  # Sentinel default, so an explicitly configured empty string means "this
+  # project has no gate at this level" and reaches gate_run, which fails
+  # loudly — rather than silently falling through to auto-detection.
+  configured="$(cfg_get "gates.$level" '@@UNSET@@')"
+  if [ "$configured" != "@@UNSET@@" ]; then
     printf '%s' "$configured"
     return 0
   fi
@@ -936,6 +947,27 @@ test_gate_run_fails_loudly_without_a_command() {
   AGENT_REPO="$(mktemp_repo)"
   assert_fails "no gate is an error" gate_run suite
 }
+
+test_gate_level_rejects_an_unknown_configured_level() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gate_policy":{"commit_requires":"ful"}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_fails "typo'd gate level fails loudly" gate_level_for src/a.ts
+}
+
+test_gate_level_rejects_an_unknown_escalation_level() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gate_policy":{"escalate_when":{"src/*":"complete"}}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_fails "typo'd escalation level fails loudly" gate_level_for src/a.ts
+}
+
+test_gate_level_matches_a_pattern_containing_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  mkdir -p "$AGENT_REPO/.agent"
+  printf '{"gate_policy":{"escalate_when":{"my src/*":"full"}}}\n' > "$AGENT_REPO/.agent/config.json"
+  assert_eq "full" "$(gate_level_for 'my src/kernel.gd')" "space in pattern still escalates"
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -965,7 +997,10 @@ gate_name_for_rank() {
     1) printf 'focused' ;;
     2) printf 'suite' ;;
     3) printf 'full' ;;
-    *) printf 'focused' ;;
+    *)
+      printf 'gate_name_for_rank: unknown rank %s\n' "$1" >&2
+      return 1
+      ;;
   esac
 }
 
@@ -973,18 +1008,31 @@ gate_level_for() {
   local floor best rank pattern level file rules
   floor="$(cfg_get gate_policy.commit_requires 'focused')"
   best="$(gate_rank "$floor")"
+  if [ "$best" -eq 0 ]; then
+    printf 'unknown gate level in gate_policy.commit_requires: %s\n' "$floor" >&2
+    return 1
+  fi
 
   rules="$(cfg_get gate_policy.escalate_when '{}')"
   for file in "$@"; do
-    for pattern in $(printf '%s' "$rules" | jq -r 'keys[]' 2>/dev/null); do
+    # A here-doc keeps this loop in the current shell — a pipe would run it in a
+    # subshell and discard "best". read -r preserves patterns containing spaces.
+    while IFS= read -r pattern; do
+      [ -n "$pattern" ] || continue
       case "$file" in
         $pattern)
           level="$(printf '%s' "$rules" | jq -r --arg k "$pattern" '.[$k]')"
           rank="$(gate_rank "$level")"
+          if [ "$rank" -eq 0 ]; then
+            printf 'unknown gate level in gate_policy.escalate_when["%s"]: %s\n' "$pattern" "$level" >&2
+            return 1
+          fi
           [ "$rank" -gt "$best" ] && best="$rank"
           ;;
       esac
-    done
+    done <<EOF
+$(printf '%s' "$rules" | jq -r 'keys[]' 2>/dev/null)
+EOF
   done
   gate_name_for_rank "$best"
 }
@@ -1232,6 +1280,31 @@ test_slice_disjoint_rejects_identical_file() {
   AGENT_REPO="$(mktemp_repo)"
   assert_fails "same file rejected" slice_disjoint "src/a/x.ts" "src/a/x.ts"
 }
+
+test_slice_module_handles_a_path_containing_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_eq "my src/core" "$(slice_module 'my src/core/x.ts')" "space in path keeps both components"
+}
+
+test_slice_disjoint_rejects_a_shared_module_across_paths_with_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_fails "shared module with spaces rejected" \
+    slice_disjoint 'my src/core/a.ts' 'my src/core/b.ts'
+}
+
+test_slice_disjoint_accepts_separate_modules_with_spaces() {
+  AGENT_REPO="$(mktemp_repo)"
+  slice_disjoint 'my src/core/a.ts' 'my src/ui/b.ts'
+  assert_eq "0" "$?" "different modules with spaces are disjoint"
+}
+
+test_slice_disjoint_reads_multi_file_lists() {
+  AGENT_REPO="$(mktemp_repo)"
+  assert_fails "overlap anywhere in the lists is rejected" \
+    slice_disjoint 'src/a/x.ts
+src/b/y.ts' 'src/c/z.ts
+src/b/w.ts'
+}
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
@@ -1250,31 +1323,42 @@ Expected: FAIL — `slice.sh: No such file or directory`
 slice_module() {
   local file="$1" modules name pattern
   modules="$(cfg_get modules '{}')"
-  for name in $(printf '%s' "$modules" | jq -r 'keys[]' 2>/dev/null); do
+  # here-doc, not a pipe: the loop must return from the calling shell, and
+  # read -r keeps module names containing spaces intact.
+  while IFS= read -r name; do
+    [ -n "$name" ] || continue
     pattern="$(printf '%s' "$modules" | jq -r --arg k "$name" '.[$k]')"
     case "$file" in
       $pattern) printf '%s' "$name"; return 0 ;;
     esac
-  done
+  done <<EOF
+$(printf '%s' "$modules" | jq -r 'keys[]' 2>/dev/null)
+EOF
   printf '%s' "$file" | awk -F/ '{ if (NF >= 2) print $1 "/" $2; else print $1 }'
 }
 
 slice_disjoint() {
-  local a_files="$1" b_files="$2" a b a_mods
+  local a_files="$1" b_files="$2" a b a_mods b_mod
   a_mods=""
-  for a in $a_files; do
-    a_mods="$a_mods $(slice_module "$a")"
-  done
-  for b in $b_files; do
-    local b_mod
+  # File lists are newline-separated. Word-splitting would break any path
+  # containing a space, so every loop here reads line by line.
+  while IFS= read -r a; do
+    [ -n "$a" ] || continue
+    a_mods="$a_mods
+$(slice_module "$a")"
+  done <<EOF
+$a_files
+EOF
+  while IFS= read -r b; do
+    [ -n "$b" ] || continue
     b_mod="$(slice_module "$b")"
-    case " $a_mods " in
-      *" $b_mod "*)
-        printf 'slices are not disjoint: both touch %s\n' "$b_mod" >&2
-        return 1
-        ;;
-    esac
-  done
+    if printf '%s\n' "$a_mods" | grep -Fxq "$b_mod"; then
+      printf 'slices are not disjoint: both touch %s\n' "$b_mod" >&2
+      return 1
+    fi
+  done <<EOF
+$b_files
+EOF
   return 0
 }
 ```
