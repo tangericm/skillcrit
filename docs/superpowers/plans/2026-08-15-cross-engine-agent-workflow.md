@@ -39,7 +39,8 @@
 | `plugins/agent-loop/skills/session-state/SKILL.md` | procedure for `/status` `/next` `/auto` `/handoff` |
 | `plugins/agent-loop/skills/adversarial-review/SKILL.md` | procedure for `/adversarial` |
 | `plugins/agent-loop/commands/*.md` | Claude-only shims naming the skill |
-| `.claude-plugin/marketplace.json`, `.claude-plugin/plugin.json` | Claude packaging + hooks |
+| `.claude-plugin/marketplace.json` | Claude marketplace listing, at the repo root — this is the one file Claude always looks for at a fixed location |
+| `plugins/agent-loop/.claude-plugin/plugin.json` | Claude plugin manifest + hooks, under the marketplace's declared `source` (`./plugins/agent-loop`) — Claude resolves the plugin root from that `source` value and reads `<source>/.claude-plugin/plugin.json` from there, not from the repo root |
 | `plugins/agent-loop/.codex-plugin/plugin.json` | Codex packaging |
 | `tests/run.sh`, `tests/*_test.sh` | bash fixtures |
 
@@ -1738,7 +1739,7 @@ git commit -m "feat: add the session-state skill and command shims"
 
 **Files:**
 - Create: `.claude-plugin/marketplace.json`
-- Create: `.claude-plugin/plugin.json`
+- Create: `plugins/agent-loop/.claude-plugin/plugin.json`
 - Create: `plugins/agent-loop/.codex-plugin/plugin.json`
 - Create: `plugins/agent-loop/hooks/session_start.sh`
 - Create: `plugins/agent-loop/hooks/git_guard.sh`
@@ -1748,6 +1749,19 @@ git commit -m "feat: add the session-state skill and command shims"
 - Consumes: `lib/env.sh` from Task 9
 - Produces: installable plugin in both engines. Hooks read `AGENT_REPO` from the invoking directory.
 
+**Why the plugin manifest lives under `plugins/agent-loop/`, not the repo root:**
+`marketplace.json` is the one file Claude looks for at a fixed location —
+the repo root — because that is what `claude plugin marketplace add` points
+at. Everything after that is resolved relative to the `source` each
+marketplace entry declares (`./plugins/agent-loop` here). Claude reads the
+plugin's own manifest from `<source>/.claude-plugin/plugin.json`, so that is
+where `plugin.json` must sit — a copy at the repo root is never opened, and
+its hooks silently never fire. The `caveman` reference pack looks like it
+puts `plugin.json` at the repo root, but its marketplace `source` is `"./"`,
+making the repo root *its* plugin root too; that layout is only correct
+when the plugin and the repo coincide, which is not the case for a
+multi-plugin-shaped repo with `plugins/<name>/` subdirectories.
+
 - [ ] **Step 1: Write the failing test**
 
 `tests/packaging_test.sh`:
@@ -1756,10 +1770,40 @@ git commit -m "feat: add the session-state skill and command shims"
 #!/bin/bash
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The plugin manifest lives wherever marketplace.json's "source" says it
+# does, not at a path we merely expect. Derive it instead of assuming it, or
+# a manifest sitting at the wrong path (unread by Claude) parses fine in a
+# test that checks the wrong file — which is exactly how this shipped broken.
+PLUGIN_SOURCE="$(jq -r '.plugins[0].source' "$ROOT_DIR/.claude-plugin/marketplace.json" 2>/dev/null)"
+PLUGIN_ROOT="$ROOT_DIR/${PLUGIN_SOURCE#./}"
+PLUGIN_MANIFEST="$PLUGIN_ROOT/.claude-plugin/plugin.json"
+
 test_manifests_are_valid_json() {
   assert_eq "0" "$(jq -e . "$ROOT_DIR/.claude-plugin/marketplace.json" >/dev/null 2>&1; echo $?)" "marketplace.json parses"
-  assert_eq "0" "$(jq -e . "$ROOT_DIR/.claude-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "claude plugin.json parses"
+  assert_eq "0" "$(jq -e . "$PLUGIN_MANIFEST" >/dev/null 2>&1; echo $?)" "claude plugin.json parses at marketplace-declared source"
   assert_eq "0" "$(jq -e . "$ROOT_DIR/plugins/agent-loop/.codex-plugin/plugin.json" >/dev/null 2>&1; echo $?)" "codex plugin.json parses"
+}
+
+test_plugin_manifest_lives_under_marketplace_source_not_repo_root() {
+  assert_eq "1" "$([ -f "$PLUGIN_MANIFEST" ] && printf 1 || printf 0)" "plugin.json exists at <marketplace source>/.claude-plugin/plugin.json"
+  assert_eq "1" "$([ ! -f "$ROOT_DIR/.claude-plugin/plugin.json" ] && printf 1 || printf 0)" "no dead plugin.json copy at repo root"
+}
+
+test_hook_commands_point_at_files_that_exist() {
+  local cmd path hookpath found
+  found=0
+  while IFS= read -r cmd; do
+    [ -n "$cmd" ] || continue
+    found=$((found + 1))
+    path="${cmd#*\"}"
+    path="${path%\"*}"
+    case "$path" in
+      '${CLAUDE_PLUGIN_ROOT}'*) hookpath="$PLUGIN_ROOT${path#\$\{CLAUDE_PLUGIN_ROOT\}}" ;;
+      *) hookpath="$path" ;;
+    esac
+    assert_eq "1" "$([ -f "$hookpath" ] && printf 1 || printf 0)" "hook command resolves to an existing file: $cmd"
+  done < <(jq -r '.hooks | to_entries[] | .value[] | .hooks[] | .command' "$PLUGIN_MANIFEST" 2>/dev/null)
+  assert_eq "1" "$([ "$found" -gt 0 ] && printf 1 || printf 0)" "at least one hook command was found to check"
 }
 
 test_codex_manifest_points_at_shared_skills() {
@@ -1822,7 +1866,8 @@ Expected: FAIL — `.claude-plugin/marketplace.json: No such file or directory`
 }
 ```
 
-`.claude-plugin/plugin.json`:
+`plugins/agent-loop/.claude-plugin/plugin.json` (under the marketplace's
+declared `source`, not the repo root — see the note above):
 
 ```json
 {
@@ -1930,7 +1975,7 @@ Expected: PASS — new packaging assertions green
 - [ ] **Step 5: Commit**
 
 ```bash
-git add .claude-plugin/ plugins/agent-loop/.codex-plugin/ plugins/agent-loop/hooks/ tests/packaging_test.sh
+git add .claude-plugin/marketplace.json plugins/agent-loop/.claude-plugin/ plugins/agent-loop/.codex-plugin/ plugins/agent-loop/hooks/ tests/packaging_test.sh
 git commit -m "feat: package for both Claude Code and Codex"
 ```
 
