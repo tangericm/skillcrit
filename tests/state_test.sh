@@ -103,4 +103,9 @@ line$i"
   assert_eq "20" "$line_count" "capped to 40 total lines (20 content + 20 blanks)"
   assert_contains "$read_notes" "line50" "keeps newest line after cap"
   assert_contains "$read_notes" "line31" "includes lines from middle range"
+  local first_line last_line
+  first_line="$(printf '%s\n' "$read_notes" | head -1)"
+  last_line="$(printf '%s\n' "$read_notes" | tail -1)"
+  assert_contains "$first_line" "line" "first line is content, not blank"
+  assert_contains "$last_line" "line" "last line is content, not blank"
 }

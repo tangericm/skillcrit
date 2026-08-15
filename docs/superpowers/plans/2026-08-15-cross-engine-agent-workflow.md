@@ -702,7 +702,20 @@ state_write() {
         } else {
           start = 0
         }
-        for (i = start; i <= last - first; i++) print lines[first + i]
+        for (i = start; i <= last - first; i++) {
+          window[w++] = lines[first + i]
+        }
+        w_first = -1
+        w_last = -1
+        for (i = 0; i < w; i++) {
+          if (window[i] ~ /[^[:space:]]/) {
+            if (w_first == -1) w_first = i
+            w_last = i
+          }
+        }
+        if (w_first >= 0) {
+          for (i = w_first; i <= w_last; i++) print window[i]
+        }
       }
     }
   ')"
