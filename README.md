@@ -12,7 +12,7 @@ both hosts from the same source.
 
 ## What it does
 
-Five commands, all backed by the same shell library
+Six commands, all backed by the same shell library
 (`plugins/agent-loop/lib/*.sh`):
 
 - **`/plan`** — create a plan when none exists. Never invents work; the goal
@@ -49,6 +49,49 @@ Works unconfigured in any repository — plans are detected by scanning for
 detected from `package.json`, `Makefile`, `Cargo.toml`, `go.mod`, or
 `pyproject.toml`/`pytest.ini`. A project shapes behavior further through
 `.agent/config.json` and `.agent/rules.md`.
+
+## Invoking it
+
+The command names above are **trigger phrases, not harness-registered slash
+commands.** Each skill lists them in its `description`; the model matches the
+phrase and runs the matching procedure. That is what makes the same names
+work under both hosts, and it is the route to reach for first:
+
+```
+/status
+/next
+/handoff parallel
+```
+
+Trigger matching depends on the model recognizing the phrase. When you want
+determinism instead of recognition, name the skill directly.
+
+**Claude Code namespaces every plugin component under the plugin name**, so
+the six files in `plugins/agent-loop/commands/` are registered as skills
+called `agent-loop:<command>` — never as a bare `/command`. Typing `/status`
+alone will not resolve; `claude plugin details agent-loop@eric-tang-skills`
+lists what is actually registered.
+
+| You want | Invoke |
+|---|---|
+| `/plan`, `/status`, `/next`, `/auto`, `/handoff` | `agent-loop:session-state` |
+| `/adversarial` | `agent-loop:adversarial-review` |
+| one command explicitly | `agent-loop:status`, `agent-loop:next`, … |
+
+The per-command entries are four-line wrappers that delegate to whichever
+skill holds the procedure. `agent-loop:session-state` carries all five
+session procedures itself, so naming it reaches any of them and skips a hop.
+
+Installing from a git source means the marketplace serves the **pushed**
+commit, not your working tree. After pushing a change, refresh the host:
+
+```bash
+claude plugin marketplace update eric-tang-skills   # then: claude plugin update agent-loop@eric-tang-skills
+codex plugin marketplace upgrade
+```
+
+Both take effect on the next session start. Run `claude plugin validate .`
+before pushing to catch a broken manifest without a round trip.
 
 ## The two safety rules
 
