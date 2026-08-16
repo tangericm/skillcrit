@@ -242,21 +242,56 @@ Default: emit a paste-ready prompt containing the state file, plan path, branch,
 next step, the rules file path, and the gate commands. Keep it engine-neutral —
 the same text must work in Claude or Codex.
 
-`parallel`: also choose a slice and prove it disjoint from the current work,
-by hand:
+`parallel`: hand a **different** agent a **different** task. Not the current
+task, and not any part of it. The receiving agent works at the same time as
+this session, on work this session will never touch.
 
-1. List the files the current work touches and the files the candidate slice
-   touches.
+The most common way to get this wrong is to hand off the very thing the
+current session is about to do — a prerequisite, a fix the current task
+needs, the next step of the current task. That is not parallel work; it is
+the same work, raced. Two agents then edit toward the same goal from two
+branches. Before proposing any slice, ask: *if the receiving agent never
+does this, does the current session still have to?* If yes, it is not a
+parallel slice. Choose again.
+
+A parallel slice is **downstream or sideways, never upstream**. Draw it from
+the plan's later tasks, a separate module's backlog, or work the current
+task's output feeds into — something whose absence does not block this
+session and whose presence does not change what this session is doing.
+
+Prove it disjoint from the current work, by hand:
+
+1. List the files the current work touches. Include the files this session
+   is *going to* touch, not only the ones already modified — a slice that
+   collides with the next commit is not disjoint just because that commit
+   has not landed. Then list the files the candidate slice touches. When the
+   slice integrates existing commits, read their file lists (`git show
+   --name-only`) rather than assuming.
 2. Map each file to a module: if `.agent/config.json` has a `modules` map,
    use the name of the first entry whose glob matches the file; otherwise use
    the file's first two path components (or just the first, if the path has
    only one).
 3. Compare the two module sets. If they share a module, **refuse rather than
    guess** — name the shared module in the refusal.
+4. Check the shared resources neither module set names. Two file-disjoint
+   tasks still collide over one booted emulator or device, one database, one
+   bound port, one build directory, one external account, or one piece of
+   hardware. Name each shared resource and say how the slice avoids it — a
+   second emulator profile, a separate database, a different port — or
+   refuse. A worktree isolates files; it does not isolate a simulator.
+5. Verify the slice's preconditions actually hold right now, before handing
+   it over. Branches named in a plan get deleted, referenced commits go
+   unreachable, fixtures rot. Run the checks. When a precondition has already
+   failed, that discovery belongs in the handoff as a known blocker with the
+   evidence, not as a surprise for the receiving agent.
 
-Only when the sets are disjoint: get the branch prefix via
+Only when all five pass: get the branch prefix via
 `<agent-loop> claude cfg_get vcs.branch_prefix agent/` and the worktree root
 via `<agent-loop> claude cfg_get vcs.worktree_root .worktrees`, then name a
 new branch `<prefix><short-name>` and worktree path
-`<worktree_root>/<short-name>`, and state the file ownership boundary
-explicitly.
+`<worktree_root>/<short-name>`.
+
+The emitted prompt states the ownership boundary in both directions: what the
+receiving agent owns, and what it must not touch because this session is
+editing it now. Tell it to stop and report rather than resolve, if a conflict
+or a generated file ever puts a not-owned path in its diff.
