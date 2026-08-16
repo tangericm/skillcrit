@@ -208,11 +208,20 @@ Loop `/next`. Halt on any of:
 - a decision the plan does not specify
 - `limits.max_tasks` or `limits.max_minutes` reached
 
-Before halting for any reason, run
-`<agent-loop> claude cfg_get gate_policy.halt_requires full` to get the
-required level, then `<agent-loop> claude gate_run "<level>"` **once** and
-record the result. Narrow per-task gates mean a chain of green commits can
-still break the full suite.
+Before halting, run `<agent-loop> claude cfg_get gate_policy.halt_requires
+full` to get the required level, then `<agent-loop> claude gate_run
+"<level>"` **once** and record the result. Narrow per-task gates mean a
+chain of green commits can still break the full suite.
+
+**Skip that gate run entirely when this `/auto` invocation completed zero
+tasks** — halted at preflight on an open human gate, an empty
+`detect_plan`, an exhausted plan, or a `limits` value already reached
+before the first task. The halt gate exists to catch what a chain of narrow
+per-task gates let through; with no task run there is no such chain, the
+working tree is whatever the last session already verified, and the full
+suite is often the most expensive command in the repository. Report the
+halt reason and skip it. The gate run is required only once at least one
+task has been committed in this invocation.
 
 Refuse to start when `<agent-loop> claude detect_gate suite` is empty.
 Unattended commits without verification are not a feature.
