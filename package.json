@@ -1,7 +1,7 @@
 {
   "name": "skillcrit",
   "version": "0.4.0",
-  "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
+  "description": "A linter for your skills.",
   "type": "module",
   "bin": {
     "skillcrit": "./dist/cli.js"

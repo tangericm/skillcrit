@@ -168,7 +168,7 @@ function parseArgs(argv: string[]) {
 }
 
 function usage(): string {
-  return `skillcrit ${packageVersion()} — find skills that clash or are installed twice, then see if a pack actually helps
+  return `skillcrit ${packageVersion()} — a linter for your skills
 
   skillcrit --version
   skillcrit roots [path] [--json]

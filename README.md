@@ -5,7 +5,7 @@
 <h1 align="center">skillcrit</h1>
 
 <p align="center">
-  Find skills that clash or are installed twice. See if a pack actually helps.
+  A linter for your skills.
 </p>
 
 <p align="center">

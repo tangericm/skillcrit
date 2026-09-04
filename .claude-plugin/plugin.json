@@ -1,6 +1,6 @@
 {
   "name": "skillcrit",
-  "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
+  "description": "A linter for your skills.",
   "author": { "name": "Eric Tang" },
   "icon": "./docs/icon.png",
   "license": "MIT",

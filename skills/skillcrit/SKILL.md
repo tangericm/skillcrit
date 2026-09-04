@@ -1,7 +1,7 @@
 ---
 name: skillcrit
 description: >
-  Find skills that clash or are installed twice. See if a pack actually helps. Use when the user
+  A linter for your skills. Use when the user
   asks whether installed skills conflict, how many always-on tokens they add,
   whether a skill pack helps, where Qwen/Hermes/Pi/Codex skills live, or to
   run skillcrit / skill-pack evals.

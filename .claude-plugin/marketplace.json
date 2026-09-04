@@ -1,12 +1,12 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "skillcrit",
-  "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
+  "description": "A linter for your skills.",
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {
       "name": "skillcrit",
-      "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
+      "description": "A linter for your skills.",
       "source": "./",
       "category": "productivity",
       "license": "MIT"

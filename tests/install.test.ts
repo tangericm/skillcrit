@@ -55,7 +55,7 @@ describe("install surface", () => {
     expect(fs.existsSync(path.join(root, "docs/icon.png"))).toBe(true);
     expect(fs.statSync(path.join(root, "docs/icon.png")).size).toBeGreaterThan(1000);
     expect(pkg.description).toBe(
-      "Find skills that clash or are installed twice. See if a pack actually helps."
+      "A linter for your skills."
     );
     expect(readme).not.toMatch(/durable session position/);
     const cursor = JSON.parse(
