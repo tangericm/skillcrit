@@ -30,13 +30,17 @@ export type ScanOptions = {
 };
 
 export function scan(root: string, options: ScanOptions = {}): SkillRecord[] {
-  const files = new Set<string>();
+  const files = new Map<string, string>();
   for (const dir of collectRoots(root, options)) {
-    walkSkillFiles(dir, files);
+    const found = new Set<string>();
+    walkSkillFiles(dir, found);
+    for (const file of found) {
+      if (!files.has(file)) files.set(file, dir);
+    }
   }
-  return [...files].map(parseSkill).sort((a, b) =>
-    a.skillFile.localeCompare(b.skillFile)
-  );
+  return [...files.entries()]
+    .map(([file, walkRoot]) => parseSkill(file, walkRoot))
+    .sort((a, b) => a.skillFile.localeCompare(b.skillFile));
 }
 
 function collectRoots(root: string, options: ScanOptions): string[] {
@@ -70,7 +74,7 @@ function walkSkillFiles(dir: string, out: Set<string>): void {
   }
 }
 
-function parseSkill(skillFile: string): SkillRecord {
+function parseSkill(skillFile: string, walkRoot: string): SkillRecord {
   const raw = fs.readFileSync(skillFile, "utf8");
   const parsed = matter(raw);
   const data = parsed.data as Record<string, unknown>;
@@ -79,7 +83,7 @@ function parseSkill(skillFile: string): SkillRecord {
   const body = parsed.content.trim();
   const skillDir = path.dirname(skillFile);
   const folder = path.basename(skillDir);
-  const packRoot = findPackRoot(skillDir);
+  const packRoot = findPackRoot(skillDir, walkRoot);
   const pack = packRoot ? packName(packRoot) : null;
   const commands = packRoot ? listCommands(packRoot) : [];
   const hooks = packRoot ? packHasHooks(packRoot) : false;
@@ -129,12 +133,14 @@ function specIssuesFor(
   return issues;
 }
 
-function findPackRoot(start: string): string | null {
-  let dir = start;
-  for (let i = 0; i < 8; i++) {
+function findPackRoot(start: string, stopAt: string): string | null {
+  const stop = path.resolve(stopAt);
+  let dir = path.resolve(start);
+  for (let i = 0; i < 16; i++) {
     if (PLUGIN_MANIFESTS.some((rel) => fs.existsSync(path.join(dir, rel)))) {
       return dir;
     }
+    if (dir === stop) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
     dir = parent;

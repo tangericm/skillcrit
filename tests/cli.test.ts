@@ -1,15 +1,14 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/cli.ts";
+import { main } from "../src/command.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const stacked = path.join(root, "fixtures/repos/stacked");
 
 /**
- * Call main() in-process. Spawning the tsx CLI on Windows starts a wrapper
- * process that exits 0 with empty stdout; the real CLI runs as a child whose
- * pipes we never see (scan JSON is empty, lint looks like a clean 0).
+ * Call main() in-process. The process entry (`src/cli.ts`) always invokes
+ * main; tests import this module so they do not spawn tsx.
  */
 async function run(args: string[]) {
   const captured = { stdout: "", stderr: "" };

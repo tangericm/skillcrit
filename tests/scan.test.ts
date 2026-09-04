@@ -62,6 +62,13 @@ describe("scan", () => {
     );
   });
 
+  it("does not attribute fixture skills to this repo's marketplace pack", () => {
+    const tdd = scan(stacked).find((s) => s.name === "tdd-kit");
+    const alpha = scan(stacked).find((s) => s.name === "alpha-status");
+    expect(tdd?.pack).not.toBe("skillcrit");
+    expect(alpha?.pack).toBe("alpha-pack");
+  });
+
   it("does not walk node_modules when scanning", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-scan-"));
     const realDir = path.join(tmp, "skills", "real");
