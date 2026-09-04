@@ -1,4 +1,19 @@
+import type { RuleId } from "./rules.js";
+
 export type SkillOrigin = "project" | "user" | "marketplace" | "cache";
+
+export type Severity = "error" | "warning" | "info";
+
+/** One spec/budget defect found while parsing a single SKILL.md. */
+export type SpecFinding = {
+  id: RuleId;
+  severity: Severity;
+  /** Frontmatter field or `body`; empty when the whole file failed to parse. */
+  field: string;
+  message: string;
+  /** 1-indexed line in SKILL.md, when it can be located. */
+  line: number | null;
+};
 
 export type SkillRecord = {
   name: string;
@@ -13,17 +28,37 @@ export type SkillRecord = {
   hooks: boolean;
   alwaysOn: boolean;
   descriptionTokens: number;
+  bodyTokens: number;
+  bodyLines: number;
+  /** sha256 of the raw SKILL.md bytes — the provenance handle for a copy. */
+  hash: string;
   alwaysOnTokens: number;
+  /** Human-readable spec messages. Kept for compatibility; see specFindings. */
   specIssues: string[];
+  specFindings: SpecFinding[];
+  risks: RiskFinding[];
+};
+
+export type RiskFinding = {
+  id: RuleId;
+  severity: Severity;
+  /** File the signal was seen in, relative to the skill directory. */
+  file: string;
+  line: number | null;
+  /** The matched text, trimmed and truncated. */
+  evidence: string;
 };
 
 export type LintRule =
   | "spec"
+  | "budget"
   | "trigger-overlap"
   | "contention"
   | "duplicate-command"
   | "duplicate-copy"
   | "version-conflict"
+  | "shadowed"
+  | "risk"
   | "always-on"
   | "always-loaded-tokens";
 
@@ -54,10 +89,17 @@ export type CleanupAction = {
 };
 
 export type LintFinding = {
+  /** Stable rule ID. Safe to gate CI on; see src/rules.ts. */
+  id: RuleId;
   rule: LintRule;
-  severity: "error" | "warning" | "info";
+  severity: Severity;
   skills: string[];
   message: string;
+  /** Absolute path the finding is anchored to, for editor and CI links. */
+  file?: string;
+  line?: number | null;
+  /** What to do about it. */
+  remediation?: string;
   keep?: string;
   drop?: string[];
 };
@@ -81,6 +123,12 @@ export type TokenComparison = {
 };
 
 export type LintReport = {
+  /**
+   * Scanned root, when the caller knew one. Renderers print paths relative to
+   * it; SARIF and GitHub annotations need repo-relative paths to line up with
+   * a diff at all.
+   */
+  root?: string;
   findings: LintFinding[];
   cleanup: CleanupAction[];
   questions: CleanupQuestion[];
@@ -90,12 +138,39 @@ export type LintReport = {
   unique: number;
 };
 
+/** One same-name cleanup group, not a runtime namespace. */
+export type SkillRecommendation = {
+  name: string;
+  recommended: SkillRecord;
+  reason: string;
+  alternatives: { skill: SkillRecord; why: string }[];
+  /** Equal SKILL.md bytes only; supporting files may differ. */
+  identicalInstructions: SkillRecord[];
+};
+
+export type DoctorReport = {
+  root: string;
+  runtimeResolution: "unknown";
+  limitations: string[];
+  recommendations: SkillRecommendation[];
+  scanned: number;
+  alternatives: number;
+  recommendedCatalogTokens: number;
+  recommendedAlwaysOnTokens: number;
+  risks: { skill: string; skillFile: string; finding: RiskFinding }[];
+  roots: { path: string; harness: string; scope: string; skills: number }[];
+};
+
 export type Metrics = {
   testsPassed: boolean;
   linesAdded: number;
   overbuild: number;
   wallMs: number;
   tokens?: number;
+  /** Trials this row averages. */
+  trials?: number;
+  /** Spread across those trials; 0 for a deterministic adapter. */
+  wallMsStdDev?: number;
 };
 
 export type TaskResult = {
@@ -105,6 +180,12 @@ export type TaskResult = {
 };
 
 export type EvalSummary = {
+  /** Adapter that produced these numbers. */
+  adapter: string;
+  /** True when the adapter does not call a model; see adapters/. */
+  synthetic: boolean;
+  experimental: boolean;
+  limitations: string[];
   results: TaskResult[];
   testsOn: number;
   testsOff: number;
@@ -120,6 +201,10 @@ export type AdapterRun = {
 
 export type Adapter = {
   name: string;
+  /** One line for `skillcrit eval --agent list`. */
+  summary: string;
+  /** A synthetic adapter replays fixtures; it measures nothing about a model. */
+  synthetic: boolean;
   run(opts: AdapterRun): Promise<{ tokens?: number }>;
 };
 

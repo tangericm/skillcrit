@@ -1,26 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { lint } from "../src/lint.ts";
-import { formatSummary } from "../src/summary.ts";
 import type { SkillRecord } from "../src/types.ts";
+import { formatSummary } from "../src/summary.ts";
+import { lint } from "../src/lint.ts";
+import { makeRecord } from "./support/record.ts";
 
 function rec(name: string, extra: Partial<SkillRecord> = {}): SkillRecord {
-  return {
+  return makeRecord({
     name,
-    skillDir: `/tmp/${name}`,
-    skillFile: `/tmp/${name}/SKILL.md`,
-    description: extra.description ?? `${name} unique skill for converting tables`,
-    body: extra.body ?? name,
-    pack: null,
-    version: extra.version ?? "1.0.0",
-    origin: extra.origin ?? "project",
-    commands: [],
-    hooks: false,
-    alwaysOn: extra.alwaysOn ?? false,
-    descriptionTokens: extra.descriptionTokens ?? 10,
-    alwaysOnTokens: extra.alwaysOnTokens ?? 40,
-    specIssues: extra.specIssues ?? [],
+    description: `${name} unique skill for converting tables`,
+    version: "1.0.0",
+    descriptionTokens: 10,
+    alwaysOnTokens: 40,
+    bodyTokens: 30,
+    bodyLines: 3,
     ...extra
-  };
+  });
 }
 
 describe("summary", () => {

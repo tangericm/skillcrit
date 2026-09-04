@@ -1,55 +1,104 @@
 ---
 name: skillcrit
-description: >
-  A linter for your skills. Use when the user
-  asks whether installed skills conflict, how many always-on tokens they add,
-  whether a skill pack helps, where Qwen/Hermes/Pi/Codex skills live, or to
-  run skillcrit / skill-pack evals.
+description: Audit installed agent skills. Use when the user asks about skill conflicts or duplicates, context costs, skill locations, SKILL.md conformance, cleanup recommendations, or skill-pack evaluation.
 license: MIT
-compatibility: Requires Node 22+ and the skillcrit CLI on PATH.
+compatibility: Requires Node 22+ and the skillcrit CLI reachable as a process.
 metadata:
   author: Eric Tang
   repo: https://github.com/tangericm/skillcrit
+  version: "0.5.0"
 ---
 
 # skillcrit
 
-Do not guess about stacked skills. Run the CLI as a process. Do not import
-`main` from a scratchpad.
+Run the CLI as a process and report what it prints. Do not guess about
+installed skills, and do not import `main` from a scratchpad.
 
-Do not `cd` into the skillcrit git clone unless that clone is the project the
-user has open. Default `[path]` is the session cwd.
+## Which command
 
-Every Bash call is a fresh process. Prefer `skillcrit` on PATH (`npm i -g skillcrit`
-or `npm link` after `npm run build`). Fallbacks: `node <checkout>/dist/cli.js`,
-then `npx tsx <checkout>/src/cli.ts`.
+| The user wants to know | Run |
+| --- | --- |
+| Which copies to review for cleanup (runtime selection remains unknown) | `skillcrit doctor [path]` |
+| Estimated context cost of the recommended set | `skillcrit doctor [path]` |
+| Every problem, with a fix per finding | `skillcrit lint [path]` |
+| What to delete, as a reviewable plan | `skillcrit lint [path] --fix` |
+| Whether one SKILL.md is spec-conformant | `skillcrit lint <skill-dir>` |
+| Where skills live on this machine | `skillcrit roots [path]` |
+| A flat list of what is installed | `skillcrit scan [path]` |
+| What a rule ID means | `skillcrit rules` |
+| Whether a skill pack helps | `skillcrit eval <pack-dir>` — read the caveats below |
 
-Progress goes to stderr (TTY only). Print stdout. Summaries and questions are
-on stdout after findings. Do not invent a score.
+Add `--user` whenever the question is about the machine rather than one repo.
+Without it only the project tree is read.
 
-```bash
-skillcrit --version
-skillcrit roots [path] --json
-skillcrit lint [path] --json
-skillcrit lint [path] --user --json
-skillcrit lint [path] --user --fix --out skillcrit-cleanup.md
-skillcrit scan [path] --json
-skillcrit eval <pack-dir> --agent stub --json
-```
+Add `--json` when you need to compute over the result. Print the text form when
+the user is reading it.
 
-- `skillcrit roots` lists project, user, and admin skill/plugin dirs for Claude,
-  Cursor, Codex, Qwen, Gemini, Hermes, Pi, OpenCode, Copilot, Continue, Goose,
-  and DeepSeek, and whether each path exists.
-- Project lint walks the repo (`.agents/skills`, `.claude/skills`, `.cursor/skills`,
-  `.codex/skills`, `.qwen/skills`, `.gemini/skills`, `.pi/skills`, `skills/`,
-  `plugins/`, and the other harness folders). `--user` adds the matching
-  `$HOME` trees plus `/etc/codex/skills`.
-- Cache/marketplace copies are tagged and collapsed when the body matches.
-- `--fix` is a dry-run markdown inventory: each group lists the **Keep**
-  (super) directory — higher scope, newer version — then **Orphans** to
-  delete or disable. It writes `skillcrit-cleanup.md` (`--out -` skips the
-  write; `--out package.json` / `SKILL.md` / `.env` is refused). Then
-  numbered questions and a token comparison. It never deletes skill files.
-- `eval` uses bundled fixtures. Default `--agent stub` needs no API key.
+## When not to use this
 
-Lint exit code 1 means findings (warnings or errors), not a crash.
+- Authoring a new skill from scratch — skillcrit checks skills, it does not
+  write them.
+- "Is this skill safe?" — `SC4xxx` findings are signals for a human to read,
+  not a verdict. Say so explicitly rather than reporting a clean run as safe.
+- Anything about tool permissions, MCP servers, or subagents. Out of scope.
+
+## Preflight
+
+Skill/plugin installation provides instructions only; the CLI is a separate prerequisite.
+Run `skillcrit --version`. If missing, explain that Node 22+ and
+the CLI are required. This is a private preview, not yet published to npm.
+With an authorized source checkout, build it using `npm ci` and `npm run build`,
+then use its `dist/cli.js` directly or install it with `npm install -g .`.
+After publication, `npm i -g skillcrit` is an alternative. Obtain approval before
+installing software; npm downloads packages. After installation, verify the
+version and run `skillcrit doctor .` from the project being audited.
+
+Only if a real source checkout already exists, use
+`node <checkout>/dist/cli.js` after building it. Never assume a skill folder or
+plugin cache contains a built CLI. Reuse the invocation that succeeded.
+
+Default `[path]` is the session cwd. Do not `cd` into the skillcrit checkout
+unless that checkout is the project the user has open.
+
+## Reading the output
+
+- Exit 1 means findings at or above the gate. It is a result, not a crash.
+  Exit 2 is bad usage, exit 3 means skillcrit could not run.
+- Progress goes to stderr and only on a TTY. Everything you report is on
+  stdout.
+- Every finding carries a stable rule ID (`SC1002`, `SC4003`), a `file:line`,
+  and a fix. Quote the ID and the location; do not paraphrase them away.
+- `doctor` reports cleanup recommendations, not runtime loading. Preserve
+  `runtimeResolution: "unknown"` and the report limitations. Equal SKILL.md
+  bytes mean identical instructions; scripts and references may differ.
+  Verify the client's namespace, enablement, and precedence before explaining
+  which copy loads. A recommendation is not permission to remove another copy.
+- Do not invent a score, a grade, or a pass/fail that skillcrit did not print.
+
+## Safety invariants
+
+- Inventory commands only read files and write to stdout. They make no network
+  calls and need no API key. `eval` executes task code in temporary workspaces;
+  custom `--tasks` suites must be trusted and are not security-sandboxed.
+- `--fix` is a dry run. It writes one markdown file and never deletes a skill.
+  It refuses to write over `package.json`, `SKILL.md`, or `.env`.
+- Deleting anything the plan recommends is the user's decision. Show the plan,
+  then ask. Do not delete skill directories on their behalf.
+- `--user` reads the documented `$HOME` skill directories. If the user has not
+  asked about their machine, leave it off.
+
+## Eval honesty
+
+`eval` is experimental. The only shipped adapter is `stub`, which replays
+recorded fixtures: deterministic, no API key, and it measures nothing about any
+real agent. Run `skillcrit eval --agent list` before quoting any number, and
+pass through the `limitations` section the summary prints. `--repeat <n>`
+reports standard deviation; a single trial of a stochastic agent is an
+anecdote.
+
+## References
+
+- `references/commands.md` — every command, flag, exit code, and output format.
+- `references/rules.md` — what each rule family means and how to configure it.
+- `references/interpreting.md` — the cleanup model, token accounting, and
+  how to write up a result.

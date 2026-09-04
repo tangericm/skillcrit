@@ -35,7 +35,7 @@ export function runCommand(
   return spawnSync(command, [...args], base) as SpawnSyncReturns<string>;
 }
 
-export function quoteShellArg(arg: string): string {
+function quoteShellArg(arg: string): string {
   if (process.platform === "win32") {
     if (arg.length === 0) return '""';
     if (!/[\s"&|<>^%()]/.test(arg)) return arg;

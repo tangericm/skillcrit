@@ -1,12 +1,12 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "skillcrit",
-  "description": "A linter for your skills.",
+  "description": "Audit installed agent skills, conflicts, and context costs.",
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {
       "name": "skillcrit",
-      "description": "A linter for your skills.",
+      "description": "Audit installed agent skills, conflicts, and context costs.",
       "source": "./",
       "category": "productivity",
       "license": "MIT"

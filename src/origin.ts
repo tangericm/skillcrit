@@ -1,4 +1,4 @@
-import os from "node:os";
+import { homeDir } from "./home.js";
 import { USER_HOME_PREFIXES } from "./roots.js";
 import type { SkillOrigin, SkillRecord } from "./types.js";
 
@@ -10,7 +10,7 @@ export function detectOrigin(skillFile: string): SkillOrigin {
   if (n.includes("/plugins/marketplaces/") || n.includes("/marketplaces/")) {
     return "marketplace";
   }
-  const home = os.homedir().replace(/\\/g, "/").toLowerCase();
+  const home = homeDir().replace(/\\/g, "/").toLowerCase();
   const prefix = home.endsWith("/") ? home : `${home}/`;
   if (n.startsWith(prefix)) {
     const rest = n.slice(home.length);

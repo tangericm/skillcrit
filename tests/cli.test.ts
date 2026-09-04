@@ -1,41 +1,35 @@
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/command.ts";
+import { runCli } from "./support/cli.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const stacked = path.join(root, "fixtures/repos/stacked");
-
-/**
- * Call main() in-process. The process entry (`src/cli.ts`) always invokes
- * main; tests import this module so they do not spawn tsx.
- */
-async function run(args: string[]) {
-  const captured = { stdout: "", stderr: "" };
-  const origOut = process.stdout.write;
-  const origErr = process.stderr.write;
-  const tap =
-    (store: "stdout" | "stderr"): typeof process.stdout.write =>
-    (chunk, encoding, cb) => {
-      captured[store] += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-      const done = typeof encoding === "function" ? encoding : cb;
-      done?.();
-      return true;
-    };
-  process.stdout.write = tap("stdout");
-  process.stderr.write = tap("stderr");
-  try {
-    const status = await main(["node", "skillcrit", ...args]);
-    return { status, stdout: captured.stdout, stderr: captured.stderr };
-  } finally {
-    process.stdout.write = origOut;
-    process.stderr.write = origErr;
-  }
-}
+const estate = path.join(root, "fixtures/repos/estate");
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf8")
+) as { version: string };
 
 describe("cli", () => {
+  it.each(["--tasks", "--agent", "--out", "--format", "--fail-on", "--config", "--repeat"])(
+    "rejects a missing value for %s before running a command", async (option) => {
+      for (const suffix of [[option], [option, "--user"], [`${option}=`]]) {
+        const result = await runCli(["lint", estate, ...suffix]);
+        expect(result.status).toBe(2);
+        expect(result.stderr).toContain(`${option} requires a value`);
+      }
+    }
+  );
+
+  it("rejects values assigned to boolean flags", async () => {
+    const result = await runCli(["scan", estate, "--user=false"]);
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("--user does not take a value");
+  });
+
   it("prints a JSON inventory for scan", async () => {
-    const result = await run(["scan", stacked, "--json"]);
+    const result = await runCli(["scan", stacked, "--json"]);
     expect(result.status).toBe(0);
     expect(result.stdout).not.toBe("");
     const payload = JSON.parse(result.stdout);
@@ -46,7 +40,7 @@ describe("cli", () => {
   });
 
   it("prints lint findings as JSON", async () => {
-    const result = await run(["lint", stacked, "--json"]);
+    const result = await runCli(["lint", stacked, "--json"]);
     expect(result.status).toBe(1);
     expect(result.stdout).not.toBe("");
     const payload = JSON.parse(result.stdout);
@@ -55,7 +49,7 @@ describe("cli", () => {
 
   it("runs eval with the stub adapter", async () => {
     const pack = path.join(stacked, ".agents/skills/tdd-kit");
-    const result = await run([
+    const result = await runCli([
       "eval",
       pack,
       "--tasks",
@@ -71,21 +65,21 @@ describe("cli", () => {
   });
 
   it("prints usage for --help and exits 0", async () => {
-    const result = await run(["--help"]);
+    const result = await runCli(["--help"]);
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/skillcrit scan/);
   });
 
   it("prints the package version", async () => {
-    const result = await run(["--version"]);
+    const result = await runCli(["--version"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/^skillcrit 0\.4\.0\n$/);
-    const dashV = await run(["-V"]);
+    expect(result.stdout).toBe(`skillcrit ${pkg.version}\n`);
+    const dashV = await runCli(["-V"]);
     expect(dashV.stdout).toBe(result.stdout);
   });
 
   it("prints a cleanup plan with --fix", async () => {
-    const result = await run(["lint", stacked, "--fix", "--out", "-"]);
+    const result = await runCli(["lint", stacked, "--fix", "--out", "-"]);
     expect(result.status).toBe(1);
     expect(result.stdout).toMatch(/skillcrit cleanup/);
     expect(result.stdout).toMatch(/\*\*Keep\*\*/);
@@ -96,7 +90,7 @@ describe("cli", () => {
   });
 
   it("includes cleanup actions in JSON lint output", async () => {
-    const result = await run(["lint", stacked, "--json"]);
+    const result = await runCli(["lint", stacked, "--json"]);
     const payload = JSON.parse(result.stdout);
     expect(Array.isArray(payload.cleanup)).toBe(true);
     expect(payload.cleanup.length).toBeGreaterThan(0);
@@ -109,7 +103,7 @@ describe("cli", () => {
   });
 
   it("lists harness skill locations", async () => {
-    const result = await run(["roots", stacked, "--json"]);
+    const result = await runCli(["roots", stacked, "--json"]);
     expect(result.status).toBe(0);
     const payload = JSON.parse(result.stdout);
     const harnesses = payload.locations.map((l: { harness: string }) => l.harness);

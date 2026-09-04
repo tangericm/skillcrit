@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -55,7 +56,7 @@ describe("install surface", () => {
     expect(fs.existsSync(path.join(root, "docs/icon.png"))).toBe(true);
     expect(fs.statSync(path.join(root, "docs/icon.png")).size).toBeGreaterThan(1000);
     expect(pkg.description).toBe(
-      "A linter for your skills."
+      "Audit installed agent skills, conflicts, and context costs."
     );
     expect(readme).not.toMatch(/durable session position/);
     const cursor = JSON.parse(
@@ -67,8 +68,15 @@ describe("install surface", () => {
       fs.readFileSync(path.join(root, ".claude-plugin/plugin.json"), "utf8")
     ) as { name: string; version?: string; license?: string };
     expect(claude.name).toBe("skillcrit");
-    expect(claude.version).toBeUndefined();
+    expect(claude.version).toBe(pkg.version);
     expect(claude.license).toBe("MIT");
+    // The Agent Plugins 1.0 manifest does carry one, so it has to track.
+    const agentPlugin = JSON.parse(
+      fs.readFileSync(path.join(root, "plugin.json"), "utf8")
+    ) as { name: string; version: string; description: string };
+    expect(agentPlugin.name).toBe("skillcrit");
+    expect(agentPlugin.version).toBe(pkg.version);
+    expect(agentPlugin.description).toBe(pkg.description);
   });
 
   it("builds and the dist CLI scan/lint/eval/roots", () => {
@@ -94,7 +102,8 @@ describe("install surface", () => {
       shell: false
     });
     expect(roots.status).toBe(0);
-    expect(roots.stdout).toMatch(/\.agents\/skills/);
+    // roots prints native paths, so normalize separators before matching.
+    expect(roots.stdout.replace(/\\/g, "/")).toMatch(/\.agents\/skills/);
     const lint = runCommand(process.execPath, [cli, "lint", stacked, "--fix", "--out", "-"], {
       cwd: root,
       shell: false
@@ -109,5 +118,43 @@ describe("install surface", () => {
     );
     expect(ev.status).toBe(0);
     expect(ev.stdout).toMatch(/add-greet/);
+
+    // Exercise the distributable outside the checkout, without a global CLI.
+    const temp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-install-"));
+    try {
+      const packed = runCommand("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", temp], {
+        cwd: root, timeout: 30_000
+      });
+      expect(packed.status, packed.stderr).toBe(0);
+      const archive = JSON.parse(packed.stdout)[0];
+      expect(archive.files.some((f: { path: string }) => f.path === "docs/icon.png")).toBe(true);
+      for (const reference of ["commands", "interpreting", "rules"]) {
+        expect(archive.files.some((f: { path: string }) =>
+          f.path === `skills/skillcrit/references/${reference}.md`
+        )).toBe(true);
+      }
+      const installed = runCommand("npm", ["install", "--prefix", temp,
+        path.join(temp, archive.filename), "--ignore-scripts", "--no-audit", "--no-fund", "--package-lock=false"], {
+        cwd: temp, timeout: 30_000
+      });
+      expect(installed.status, installed.stderr).toBe(0);
+      const installedRoot = path.join(temp, "node_modules/skillcrit");
+      const installedCli = path.join(installedRoot, "dist/cli.js");
+      const project = path.join(temp, "project");
+      fs.mkdirSync(project);
+      fs.cpSync(path.join(installedRoot, "skills/skillcrit"),
+        path.join(project, ".agents/skills/skillcrit"), { recursive: true });
+      const audit = runCommand(process.execPath, [installedCli, "doctor", ".", "--json"], {
+        cwd: project, shell: false,
+        env: { ...process.env, SKILLCRIT_HOME: path.join(temp, "empty-home") }
+      });
+      expect(audit.status, audit.stderr).toBe(0);
+      const report = JSON.parse(audit.stdout);
+      expect(report.runtimeResolution).toBe("unknown");
+      expect(report.recommendations[0].name).toBe("skillcrit");
+      expect(report).not.toHaveProperty("loaded");
+    } finally {
+      fs.rmSync(temp, { recursive: true, force: true });
+    }
   }, 60_000);
 });

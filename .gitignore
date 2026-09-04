@@ -7,3 +7,6 @@ dist/
 coverage/
 *.tsbuildinfo
 skillcrit-cleanup.md
+tmp/
+graphify-out/
+*.sarif

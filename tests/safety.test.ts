@@ -5,11 +5,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { stubAdapter } from "../src/adapters/stub.ts";
-import { main } from "../src/command.ts";
 import { evalPack } from "../src/eval.ts";
 import { cleanupPlan, lint } from "../src/lint.ts";
 import { collectRoots } from "../src/roots.ts";
 import { scan } from "../src/scan.ts";
+import { runCli } from "./support/cli.ts";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const temps: string[] = [];
@@ -89,29 +89,6 @@ function canSymlink(): boolean {
   }
 }
 
-async function runCli(args: string[]) {
-  const captured = { stdout: "", stderr: "" };
-  const origOut = process.stdout.write;
-  const origErr = process.stderr.write;
-  const tap =
-    (store: "stdout" | "stderr"): typeof process.stdout.write =>
-    (chunk, encoding, cb) => {
-      captured[store] += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-      const done = typeof encoding === "function" ? encoding : cb;
-      done?.();
-      return true;
-    };
-  process.stdout.write = tap("stdout");
-  process.stderr.write = tap("stderr");
-  try {
-    const status = await main(["node", "skillcrit", ...args]);
-    return { status, ...captured };
-  } finally {
-    process.stdout.write = origOut;
-    process.stderr.write = origErr;
-  }
-}
-
 function freezeUserTree<T>(fn: () => T): T {
   const spies = WRITE_FNS.map((name) => {
     const orig = (fs as Record<string, unknown>)[name];
@@ -185,8 +162,8 @@ describe("scan and lint stay inside the target tree", () => {
     writeSkill(path.join(project, "skills", "proj"), "proj");
     writeSkill(path.join(home, ".claude", "skills", "home-one"), "home-one");
     writeSkill(path.join(home, "Documents", "secret"), "secret-home");
-    const prevHome = process.env.HOME;
-    process.env.HOME = home;
+    const prevHome = process.env.SKILLCRIT_HOME;
+    process.env.SKILLCRIT_HOME = home;
     try {
       const roots = collectRoots(project, [], false);
       expect(roots.some((r) => r === "/etc/codex/skills")).toBe(false);
@@ -195,7 +172,8 @@ describe("scan and lint stay inside the target tree", () => {
       );
       expect(scan(project).map((s) => s.name)).toEqual(["proj"]);
     } finally {
-      process.env.HOME = prevHome;
+      if (prevHome === undefined) delete process.env.SKILLCRIT_HOME;
+      else process.env.SKILLCRIT_HOME = prevHome;
     }
   });
 
@@ -206,8 +184,8 @@ describe("scan and lint stay inside the target tree", () => {
     writeSkill(path.join(project, "skills", "proj"), "proj");
     writeSkill(path.join(home, ".claude", "skills", "home-one"), "home-one");
     writeSkill(path.join(home, "Documents", "secret"), "secret-home");
-    const prevHome = process.env.HOME;
-    process.env.HOME = home;
+    const prevHome = process.env.SKILLCRIT_HOME;
+    process.env.SKILLCRIT_HOME = home;
     try {
       const roots = collectRoots(project, [], true);
       expect(roots.filter((r) => r.startsWith("/etc"))).toEqual(["/etc/codex/skills"]);
@@ -215,7 +193,8 @@ describe("scan and lint stay inside the target tree", () => {
       const names = scan(project, { user: true }).map((s) => s.name).sort();
       expect(names).toEqual(["home-one", "proj"]);
     } finally {
-      process.env.HOME = prevHome;
+      if (prevHome === undefined) delete process.env.SKILLCRIT_HOME;
+      else process.env.SKILLCRIT_HOME = prevHome;
     }
   });
 });

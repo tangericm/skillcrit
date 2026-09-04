@@ -1,26 +1,14 @@
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { compareSkills, compareVersions, detectOrigin, rankSkill } from "../src/origin.ts";
 import type { SkillRecord } from "../src/types.ts";
+import { compareSkills, compareVersions, detectOrigin, rankSkill } from "../src/origin.ts";
+import { makeRecord } from "./support/record.ts";
 
-function fake(partial: Partial<SkillRecord> & Pick<SkillRecord, "skillFile">): SkillRecord {
-  return {
-    name: "x",
-    skillDir: "/tmp",
-    description: "desc",
-    body: "body",
-    pack: null,
-    version: null,
-    origin: "project",
-    commands: [],
-    hooks: false,
-    alwaysOn: false,
-    descriptionTokens: 1,
-    alwaysOnTokens: 1,
-    specIssues: [],
-    ...partial
-  };
+function fake(
+  partial: Partial<SkillRecord> & Pick<SkillRecord, "skillFile">
+): SkillRecord {
+  return makeRecord({ skillDir: "/tmp", description: "desc", hash: "h", ...partial });
 }
 
 describe("detectOrigin", () => {

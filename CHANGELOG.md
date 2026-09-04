@@ -1,0 +1,78 @@
+# Changelog
+
+## 0.5.0
+
+Audit installed agent skills, conflicts, and context costs. Runtime loading
+remains unknown until client-specific resolution is implemented and verified.
+
+### Added
+
+- `skillcrit doctor` (alias `inspect`): cleanup recommendations, alternatives,
+  identical instruction files, per-root attribution, estimated recommended-set
+  token costs, and risk inventory for all scanned copies. JSON explicitly
+  reports runtime resolution as unknown; no fields claim loaded/shadowed counts.
+- Stable rule IDs on every finding: `SC1xxx` spec conformance, `SC2xxx` context
+  budget, `SC3xxx` collisions, `SC4xxx` risk inventory. An ID never changes
+  meaning; a retired check keeps its ID reserved. `skillcrit rules` prints the
+  catalogue.
+- Findings now carry a `file:line` anchor and a remediation, not just a message.
+- Output formats: `--format text|json|markdown|sarif|github`. SARIF 2.1.0
+  uploads to code scanning; `github` prints annotations that land on the diff.
+- `.skillcrit.json`: `ignore` globs, per-rule severity overrides (including
+  `"off"`), token and line budgets, and `failOn`. Unknown keys and unknown rule
+  IDs are reported as warnings rather than silently ignored.
+- Severity gate and a documented exit-code contract: 0 clean, 1 findings at or
+  above the gate, 2 usage, 3 could not run.
+- Risk inventory (`SC4xxx`) over SKILL.md fenced code and bundled scripts:
+  download-and-execute, credential reads, destructive commands, network reaches,
+  unpinned installs, broad `allowed-tools` grants. Framed throughout as signals
+  for human review, not a verdict.
+- Deeper spec conformance: `metadata` string-map checking, `allowed-tools`
+  shape, `compatibility` length, unrecognized frontmatter keys, and a
+  description-has-no-trigger check.
+- Lenient frontmatter parsing: an unquoted colon in a value is repaired and the
+  scanner retains it with a diagnostic; client acceptance is not inferred.
+- `SKILLCRIT_HOME` for deterministic user-scope roots in CI and containers.
+- Agent Plugins 1.0 `plugin.json` at the repo root.
+- Cross-platform CI: Ubuntu, macOS, and Windows on Node 22 and 24, plus a job
+  that lints skillcrit with itself.
+- `--repeat <n>` for eval, reporting standard deviation across trials.
+
+### Changed
+
+- The bundled agent skill is now a decision router with `references/` files
+  instead of one long instruction body.
+- Eval output states its adapter, marks itself experimental, and self-reports
+  its limitations. The `stub` adapter is labelled synthetic: it replays
+  fixtures and measures nothing about any real agent.
+- Walks are bounded (depth 8, 20,000 directories) and say so when truncated.
+- Test timeouts are explicit, and eval tests run `node <file>` directly instead
+  of shelling out to npm.
+
+### Fixed
+
+- Per-file spec and script-risk findings are retained for every scanned copy,
+  even when its instruction text duplicates a higher-ranked copy.
+- Bundled-script inventory excludes symlinks and other non-regular files.
+- GitHub annotation properties and relative SARIF paths escape special characters.
+- Missing option values and values assigned to boolean flags return usage errors.
+- Lockfile and native Claude plugin versions match the package version; packaged
+  README assets are included. Claude's native manifest validator passes cleanly.
+
+- Cleanup output no longer claims client precedence or that identical SKILL.md
+  files imply equivalent packages. Supporting files require separate review.
+- Skill and plugin setup explicitly requires a separately installed CLI.
+
+- gray-matter caches by file content *before* parsing, so a SKILL.md that threw
+  once was served with empty frontmatter on every later parse in the same
+  process. A repaired skill silently disappeared from the second scan and was
+  then reported as missing its description.
+- User-scope scans followed `HOME` on Windows, where `os.homedir()` reads
+  `USERPROFILE`.
+- Trigger contention no longer fires between two copies of one name; that is a
+  version conflict.
+- `metadata.version: 1.0` no longer renders as `@1` — a numeric version is
+  reported as `SC1008` instead of being displayed wrong.
+- Two replacement characters in `docs/banner.svg`.
+- A refused `--fix` write returns exit 3 instead of rejecting the CLI's own
+  entry point.
