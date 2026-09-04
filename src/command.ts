@@ -1,12 +1,19 @@
-import path from "node:path";
 import { stubAdapter } from "./adapters/stub.js";
 import { evalPack } from "./eval.js";
 import { lint } from "./lint.js";
 import { scan } from "./scan.js";
 import type { Adapter } from "./types.js";
+import { packageVersion } from "./version.js";
 
 export async function main(argv: string[]): Promise<number> {
-  const { command, target, json, user, tasks, agent, help } = parseArgs(argv);
+  const parsed = parseArgs(argv);
+  const { command, target, json, user, tasks, agent, help, version } = parsed;
+
+  if (version || command === "version") {
+    process.stdout.write(`skillcrit ${packageVersion()}\n`);
+    return 0;
+  }
+
   if (help || !command || command === "help" || command === "--help") {
     process.stdout.write(usage());
     return help || command ? 0 : 2;
@@ -38,7 +45,9 @@ export async function main(argv: string[]): Promise<number> {
           `${finding.severity} ${finding.rule}: ${finding.message}\n`
         );
       }
-      process.stdout.write(`~${report.alwaysOnTokens} always-on tokens\n`);
+      process.stdout.write(
+        `~${report.alwaysOnTokens} always-on tokens  ${report.unique} unique / ${report.scanned} scanned\n`
+      );
     }
     const blocking = report.findings.filter((f) => f.severity !== "info");
     return blocking.length > 0 ? 1 : 0;
@@ -74,7 +83,7 @@ export async function main(argv: string[]): Promise<number> {
 function resolveAdapter(agent: string): Adapter {
   if (agent === "stub" || agent === "") return stubAdapter;
   throw new Error(
-    `agent "${agent}" is not wired in v0.1; use --agent stub (claude/codex adapters come later)`
+    `agent "${agent}" is not wired in v0.2; use --agent stub (claude/codex adapters come later)`
   );
 }
 
@@ -85,8 +94,14 @@ function parseArgs(argv: string[]) {
   const positional: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
-    if (arg === "--json" || arg === "--user" || arg === "--help") {
-      flags.add(arg);
+    if (
+      arg === "--json" ||
+      arg === "--user" ||
+      arg === "--help" ||
+      arg === "--version" ||
+      arg === "-V"
+    ) {
+      flags.add(arg === "-V" ? "--version" : arg);
     } else if (arg === "--tasks" || arg === "--agent") {
       kv.set(arg, rest[++i] ?? "");
     } else if (arg.startsWith("-")) {
@@ -101,16 +116,21 @@ function parseArgs(argv: string[]) {
     json: flags.has("--json"),
     user: flags.has("--user"),
     help: flags.has("--help"),
+    version: flags.has("--version"),
     tasks: kv.get("--tasks"),
     agent: kv.get("--agent") ?? "stub"
   };
 }
 
 function usage(): string {
-  return `skillcrit — lint stacked Agent Skills and eval a pack on vs off
+  return `skillcrit ${packageVersion()} — lint stacked Agent Skills and eval a pack on vs off
 
+  skillcrit --version
   skillcrit scan [path] [--user] [--json]
   skillcrit lint [path] [--user] [--json]
   skillcrit eval <pack-dir> [--tasks <dir>] [--agent stub] [--json]
+
+  Default path is the current project. --user also scans installed
+  user-level skills (skips plugin cache/ and marketplaces/ mirrors).
 `;
 }

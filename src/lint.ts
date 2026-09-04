@@ -29,10 +29,25 @@ const STOP = new Set([
   "be"
 ]);
 
+export function identityKey(skill: SkillRecord): string {
+  return `${skill.name}\n${skill.description}\n${skill.body}`;
+}
+
 export function lint(skills: SkillRecord[]): LintReport {
+  const groups = new Map<string, SkillRecord[]>();
+  for (const skill of skills) {
+    const key = identityKey(skill);
+    const list = groups.get(key) ?? [];
+    list.push(skill);
+    groups.set(key, list);
+  }
+
+  const unique = [...groups.values()].map((group) => group[0]);
   const findings: LintFinding[] = [];
 
-  for (const skill of skills) {
+  findings.push(...duplicateCopies(groups));
+
+  for (const skill of unique) {
     for (const issue of skill.specIssues) {
       findings.push({
         rule: "spec",
@@ -43,11 +58,11 @@ export function lint(skills: SkillRecord[]): LintReport {
     }
   }
 
-  findings.push(...triggerOverlaps(skills));
-  findings.push(...duplicateCommands(skills));
+  findings.push(...triggerOverlaps(unique));
+  findings.push(...duplicateCommands(unique));
 
   let alwaysOnTokens = 0;
-  for (const skill of skills) {
+  for (const skill of unique) {
     alwaysOnTokens += skill.alwaysOn
       ? skill.alwaysOnTokens
       : skill.descriptionTokens;
@@ -67,11 +82,33 @@ export function lint(skills: SkillRecord[]): LintReport {
   findings.push({
     rule: "always-loaded-tokens",
     severity: "info",
-    skills: skills.map((s) => s.name),
-    message: `~${alwaysOnTokens} always-loaded tokens across ${skills.length} skills (description frontmatter plus always-on bodies)`
+    skills: unique.map((s) => s.name),
+    message: `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned)`
   });
 
-  return { findings, alwaysOnTokens };
+  return {
+    findings,
+    alwaysOnTokens,
+    scanned: skills.length,
+    unique: unique.length
+  };
+}
+
+function duplicateCopies(
+  groups: Map<string, SkillRecord[]>
+): LintFinding[] {
+  const findings: LintFinding[] = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    const paths = group.map((s) => s.skillFile).sort();
+    findings.push({
+      rule: "duplicate-copy",
+      severity: "warning",
+      skills: group.map((s) => s.name),
+      message: `${group[0].name} is installed at ${group.length} paths: ${paths.join(", ")}`
+    });
+  }
+  return findings;
 }
 
 function triggerOverlaps(skills: SkillRecord[]): LintFinding[] {

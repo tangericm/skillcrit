@@ -54,4 +54,28 @@ describe("lint", () => {
     );
     expect(csvHits).toEqual([]);
   });
+
+  it("flags identical copies as duplicate-copy, not self-overlap", () => {
+    const stackedSkills = scan(stacked);
+    const csv = stackedSkills.find((s) => s.name === "unique-csv");
+    if (!csv) throw new Error("missing unique-csv");
+    const twin = {
+      ...csv,
+      skillFile: csv.skillFile.replace("unique-csv", "unique-csv-copy"),
+      skillDir: csv.skillDir.replace("unique-csv", "unique-csv-copy")
+    };
+    const report = lint([...stackedSkills, twin]);
+    const copies = report.findings.filter((f) => f.rule === "duplicate-copy");
+    expect(copies).toHaveLength(1);
+    expect(copies[0]?.message).toMatch(/unique-csv/);
+    const selfOverlap = report.findings.filter(
+      (f) =>
+        f.rule === "trigger-overlap" &&
+        f.skills[0] === "unique-csv" &&
+        f.skills[1] === "unique-csv"
+    );
+    expect(selfOverlap).toEqual([]);
+    expect(report.scanned).toBe(stackedSkills.length + 1);
+    expect(report.unique).toBe(stackedSkills.length);
+  });
 });
