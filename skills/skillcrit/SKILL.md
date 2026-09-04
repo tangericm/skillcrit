@@ -8,20 +8,30 @@ description: >
 
 # skillcrit
 
-Do not guess about stacked skills. Run the CLI.
+Do not guess about stacked skills. Run the CLI. Do not `cd` into the skillcrit
+git clone unless that clone is the project the user has open.
 
-Discover the repo (or the installed `skillcrit` binary) and run one self-contained command per question. Every Bash call is a fresh process.
+Every Bash call is a fresh process. Prefer, in order:
+
+1. `skillcrit` on PATH (`npm link` after `npm run build`)
+2. `npx tsx <skillcrit-checkout>/src/cli.ts` if you know the checkout
+3. `node <skillcrit-checkout>/dist/cli.js` after `npm run build` there
+
+`npx skillcrit` is not published to npm in v0.1.
+
+Default `[path]` is the user's current project (the session cwd), not the
+skillcrit checkout.
 
 ```bash
-npx skillcrit lint [path] --json
-npx skillcrit scan [path] --json
-npx skillcrit eval <pack-dir> --agent stub --json
+skillcrit lint [path] --json
+skillcrit scan [path] --json
+skillcrit eval <pack-dir> --agent stub --json
 ```
 
 - `lint` walks `SKILL.md` files and plugin manifests. It reports overlapping `description` triggers, duplicate slash commands, always-on hooks/bodies, spec violations, and an always-loaded token estimate. It does not read private session logs.
 - `scan` prints the inventory `lint` and `eval` consume.
 - `eval` runs the frozen task suite with the pack off, then on. Default `--agent stub` needs no API key. Do not invent a leaderboard.
 
-Pass `--user` to include `~/.agents/skills`, `~/.claude/plugins`, `~/.cursor/plugins`, and `~/.codex/plugins`.
+Pass `--user` to include `~/.agents/skills`, `~/.claude/plugins`, `~/.cursor/plugins`, and `~/.codex/plugins`. Combine with an explicit project path: `skillcrit lint "C:\\path\\to\\project" --user --json`.
 
-Report the CLI output. Do not average findings into a single score.
+Print stdout. Empty stdout with exit 0 is a bug, not "no skills". Report the CLI output. Do not average findings into a single score.

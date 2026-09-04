@@ -70,4 +70,10 @@ describe("cli", () => {
     const payload = JSON.parse(result.stdout);
     expect(payload.results[0].task).toBe("add-greet");
   });
+
+  it("prints usage for --help and exits 0", async () => {
+    const result = await run(["--help"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/skillcrit scan/);
+  });
 });
