@@ -1,7 +1,7 @@
 {
   "name": "skillcrit",
   "displayName": "skillcrit",
-  "description": "Lint stacked Agent Skills packs and eval a pack on vs off.",
+  "description": "A linter for your skills.",
   "version": "0.4.0",
   "author": { "name": "Eric Tang" },
   "icon": "./docs/icon.png",

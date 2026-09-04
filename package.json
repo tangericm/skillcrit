@@ -1,7 +1,7 @@
 {
   "name": "skillcrit",
   "version": "0.4.0",
-  "description": "Lint stacked Agent Skills packs and eval a pack on vs off.",
+  "description": "A linter for your skills.",
   "type": "module",
   "bin": {
     "skillcrit": "./dist/cli.js"
