@@ -14,7 +14,7 @@ export function isFormat(value: string): value is Format {
 }
 
 export function formatText(report: LintReport): string {
-  let out = "";
+  let out = coverageWarning(report);
   for (const finding of report.findings) {
     const where = location(finding, report.root);
     out += `${finding.severity} ${finding.id} ${finding.rule}: ${finding.message}\n`;
@@ -30,6 +30,7 @@ export function formatMarkdown(report: LintReport): string {
   const lines = [
     "# skillcrit lint",
     "",
+    coverageWarning(report).trim(),
     `${report.unique} unique / ${report.scanned} scanned — ~${report.tokens.alwaysOnNow} always-loaded tokens`,
     ""
   ];
@@ -61,7 +62,8 @@ export function formatMarkdown(report: LintReport): string {
 
 /** GitHub Actions workflow-command annotations, one line per finding. */
 export function formatGithub(report: LintReport): string {
-  let out = "";
+  let out = report.coverage?.complete === false
+    ? `::error title=Incomplete scan::${escapeData(coverageWarning(report).trim())}\n` : "";
   for (const finding of report.findings) {
     const level = finding.severity === "info" ? "notice" : finding.severity;
     const bits = [
@@ -88,6 +90,13 @@ export function formatSarif(report: LintReport): string {
     version: "2.1.0",
     runs: [
       {
+        ...(report.coverage ? {
+          properties: { coverage: report.coverage },
+          invocations: [{
+            executionSuccessful: report.coverage.complete,
+            toolExecutionNotifications: report.coverage.reasons.map(reason => ({ level: "error", message: { text: reason } }))
+          }]
+        } : {}),
         tool: {
           driver: {
             name: "skillcrit",
@@ -126,6 +135,11 @@ export function formatSarif(report: LintReport): string {
     ]
   };
   return JSON.stringify(sarif, null, 2) + "\n";
+}
+
+function coverageWarning(report: LintReport): string {
+  return report.coverage?.complete === false
+    ? `Incomplete scan: ${report.coverage.reasons.join("; ")}\n` : "";
 }
 
 function fileUri(file: string, root: string | undefined): string {

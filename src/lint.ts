@@ -93,7 +93,7 @@ export function lint(
     }
   }
 
-  findings.push(...contentionClusters(unique, cleanup, emit));
+  for (const finding of contentionClusters(unique, cleanup, emit)) findings.push(finding);
   findings.push(...duplicateCommands(unique, emit));
 
   let alwaysOnTokens = 0;
@@ -282,6 +282,16 @@ function contentionClusters(
   const clusters = overlapClusters(skills);
   const findings: LintFinding[] = [];
   for (const members of clusters) {
+    // Dense clusters carry no evidence that hundreds of skills should be
+    // disabled. Summarize membership instead of emitting every pair or
+    // computing a speculative cleanup set.
+    if (members.length > 20) {
+      const summary = emit("SC3003", "contention", members.map(s => s.name),
+        `${members.length} skills share trigger phrases (heuristic). Review this cluster; pair details and cleanup ranking omitted above 20 members.`,
+        { file: members[0].skillFile });
+      if (summary) findings.push(summary);
+      continue;
+    }
     const ranked = [...members].sort(byRankDesc);
     const { keep, drop } = independentSet(members);
     const phrase = firstOverlapPhrase(members) ?? "the same trigger";
@@ -291,7 +301,7 @@ function contentionClusters(
       "SC3003",
       "contention",
       ranked.map((s) => s.name),
-      `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Keep ${keepNames}.`,
+      `${ranked.length} skills share “${phrase}” (heuristic, not measured contention). Review suggested order: ${order}. Candidate: ${keepNames}.`,
       {
         file: keep[0].skillFile,
         keep: keep[0].skillFile,
@@ -359,39 +369,39 @@ function firstOverlapPhrase(members: SkillRecord[]): string | undefined {
 }
 
 function overlapClusters(skills: SkillRecord[]): SkillRecord[][] {
-  const n = skills.length;
-  const adj: number[][] = Array.from({ length: n }, () => []);
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      // Two copies of one name are a version conflict (SC3002), not two
-      // skills competing for the same trigger.
-      if (skills[i].name === skills[j].name) continue;
-      if (sharedPhrases(skills[i].description, skills[j].description).length === 0) {
-        continue;
-      }
-      adj[i].push(j);
-      adj[j].push(i);
+  // Index phrases once and union their owners. No quadratic adjacency graph.
+  const parent = skills.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
     }
-  }
-  const seen = new Set<number>();
-  const clusters: SkillRecord[][] = [];
-  for (let i = 0; i < n; i++) {
-    if (seen.has(i) || adj[i].length === 0) continue;
-    const stack = [i];
-    const members: SkillRecord[] = [];
-    seen.add(i);
-    while (stack.length) {
-      const u = stack.pop()!;
-      members.push(skills[u]);
-      for (const v of adj[u]) {
-        if (seen.has(v)) continue;
-        seen.add(v);
-        stack.push(v);
-      }
+    return i;
+  };
+  const owners = new Map<string, number[]>();
+  skills.forEach((skill, i) => {
+    for (const phrase of new Set(contentNgrams(skill.description, 3))) {
+      const group = owners.get(phrase);
+      if (group) group.push(i);
+      else owners.set(phrase, [i]);
     }
-    if (members.length >= 2) clusters.push(members);
+  });
+  for (const group of owners.values()) {
+    const first = group[0];
+    // Same-name versions alone are not trigger contention. Once another name
+    // shares the phrase, every owner belongs to the same connected component.
+    if (!group.some(i => skills[i].name !== skills[first].name)) continue;
+    const root = find(first);
+    for (const i of group) parent[find(i)] = root;
   }
-  return clusters;
+  const groups = new Map<number, SkillRecord[]>();
+  skills.forEach((skill, i) => {
+    const key = find(i);
+    const members = groups.get(key);
+    if (members) members.push(skill);
+    else groups.set(key, [skill]);
+  });
+  return [...groups.values()].filter(members => members.length > 1);
 }
 
 function duplicateCommands(skills: SkillRecord[], emit: Emit): LintFinding[] {

@@ -7,6 +7,6 @@ main(process.argv).then(
   (code) => process.exit(code),
   (err) => {
     process.stderr.write(String(err) + "\n");
-    process.exit(1);
+    process.exit(3);
   }
 );

@@ -272,7 +272,7 @@ describe("lint", () => {
     ]);
     const contention = report.findings.find((f) => f.rule === "contention");
     expect(contention?.drop).toEqual(["/tmp/chain-beta/SKILL.md"]);
-    expect(contention?.message).toMatch(/Keep chain-alpha, chain-gamma/);
+    expect(contention?.message).toMatch(/Candidate: chain-alpha, chain-gamma/);
     const overlaps = report.findings.filter((f) => f.rule === "trigger-overlap");
     expect(
       overlaps.some(
