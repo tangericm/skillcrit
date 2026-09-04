@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as {
   name: string;
   version: string;
+  description: string;
   license: string;
   bin: { skillcrit: string };
   engines: { node: string };
@@ -38,8 +39,25 @@ describe("install surface", () => {
     expect(rootLicense).toMatch(/Copyright \(c\) 2026 Eric Tang/);
     const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
     expect(readme).toMatch(/npx skills add tangericm\/skillcrit/);
-    expect(readme).toMatch(/skills\.sh\/b\/tangericm\/skillcrit/);
+    expect(readme).toMatch(/docs\/icon\.png/);
+    expect(readme).toMatch(/docs\/logo\.svg|docs\/banner\.svg|docs\/badge\.svg/);
+    expect(readme).toMatch(/\]\(docs\/badge\.svg\)|src="docs\/badge\.svg"/);
+    expect(readme).toMatch(/skills\.sh\/tangericm\/skillcrit/);
+    expect(readme).not.toMatch(/skills\.sh\/b\//);
     expect(readme).toMatch(/\[MIT\]\(LICENSE\)/);
+    const logo = fs.readFileSync(path.join(root, "docs/logo.svg"), "utf8");
+    const badge = fs.readFileSync(path.join(root, "docs/badge.svg"), "utf8");
+    expect(logo).toMatch(/aria-label="skillcrit"/);
+    expect(badge).toMatch(/aria-label="skillcrit"/);
+    expect(logo).toMatch(/#c8ff3d/);
+    expect(badge).toMatch(/#c8ff3d/);
+    expect(badge).not.toMatch(/resource not found/i);
+    expect(fs.existsSync(path.join(root, "docs/icon.png"))).toBe(true);
+    expect(fs.statSync(path.join(root, "docs/icon.png")).size).toBeGreaterThan(1000);
+    expect(pkg.description).toBe(
+      "Lint stacked Agent Skills packs and eval a pack on vs off."
+    );
+    expect(readme).not.toMatch(/durable session position/);
     const cursor = JSON.parse(
       fs.readFileSync(path.join(root, ".cursor-plugin/plugin.json"), "utf8")
     ) as { version: string; skills: string };
@@ -77,7 +95,7 @@ describe("install surface", () => {
     });
     expect(roots.status).toBe(0);
     expect(roots.stdout).toMatch(/\.agents\/skills/);
-    const lint = runCommand(process.execPath, [cli, "lint", stacked, "--fix"], {
+    const lint = runCommand(process.execPath, [cli, "lint", stacked, "--fix", "--out", "-"], {
       cwd: root,
       shell: false
     });

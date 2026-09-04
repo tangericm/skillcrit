@@ -1,8 +1,16 @@
-# skillcrit
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="skillcrit" />
+</p>
 
-Lint stacked [Agent Skills](https://agentskills.io) packs and eval a pack **on vs off**.
+<h1 align="center">skillcrit</h1>
 
-[![skills.sh](https://skills.sh/b/tangericm/skillcrit)](https://skills.sh/tangericm/skillcrit)
+<p align="center">
+  Lint stacked [Agent Skills](https://agentskills.io) packs and eval a pack <strong>on vs off</strong>.
+</p>
+
+<p align="center">
+  <a href="https://skills.sh/tangericm/skillcrit"><img src="docs/badge.svg" alt="skillcrit" /></a>
+</p>
 
 ## Install
 
@@ -23,7 +31,7 @@ claude plugin install skillcrit@skillcrit
 
 ```bash
 skillcrit roots
-skillcrit lint . --user --fix
+skillcrit lint . --user --fix --out skillcrit-cleanup.md
 skillcrit eval path/to/pack
 ```
 
@@ -31,7 +39,8 @@ skillcrit eval path/to/pack
 skillcrit roots [path]             # project + user skill/plugin locations
 skillcrit scan [path] [--user]     # inventory
 skillcrit lint [path] [--user]     # conflicts, duplicates, tokens
-skillcrit lint [path] --fix        # dry-run cleanup plan
+skillcrit lint [path] --fix        # dry-run keep/orphan markdown
+skillcrit lint [path] --fix --out skillcrit-cleanup.md
 skillcrit eval <pack>              # pack on vs off
 ```
 

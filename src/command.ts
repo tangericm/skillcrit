@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { stubAdapter } from "./adapters/stub.js";
 import { evalPack } from "./eval.js";
 import { cleanupPlan, lint } from "./lint.js";
@@ -67,8 +69,10 @@ export async function main(argv: string[]): Promise<number> {
       `${report.unique} unique / ${report.scanned} scanned  ~${report.tokens.alwaysOnNow} tok`
     );
     if (parsed.fix && !json) {
-      process.stdout.write(cleanupPlan(report));
+      const md = cleanupPlan(report);
+      process.stdout.write(md);
       process.stdout.write(formatSummary(report));
+      writeCleanupDoc(parsed.out, md);
       const blocking = report.findings.filter((f) => f.severity !== "info");
       return blocking.length > 0 ? 1 : 0;
     }
@@ -141,7 +145,7 @@ function parseArgs(argv: string[]) {
       arg === "--fix"
     ) {
       flags.add(arg === "-V" ? "--version" : arg);
-    } else if (arg === "--tasks" || arg === "--agent") {
+    } else if (arg === "--tasks" || arg === "--agent" || arg === "--out") {
       kv.set(arg, rest[++i] ?? "");
     } else if (arg.startsWith("-")) {
       throw new Error(`unknown flag ${arg}`);
@@ -157,6 +161,7 @@ function parseArgs(argv: string[]) {
     help: flags.has("--help"),
     version: flags.has("--version"),
     fix: flags.has("--fix"),
+    out: kv.get("--out") ?? (flags.has("--fix") && !flags.has("--json") ? "skillcrit-cleanup.md" : "-"),
     tasks: kv.get("--tasks"),
     agent: kv.get("--agent") ?? "stub"
   };
@@ -168,14 +173,28 @@ function usage(): string {
   skillcrit --version
   skillcrit roots [path] [--json]
   skillcrit scan [path] [--user] [--json]
-  skillcrit lint [path] [--user] [--json] [--fix]
+  skillcrit lint [path] [--user] [--json] [--fix] [--out <file>]
   skillcrit eval <pack-dir> [--tasks <dir>] [--agent stub] [--json]
 
   Default path is the current project. --user also scans installed
   user-level skills (Claude, Cursor, Codex, Qwen, Gemini, Hermes, Pi,
   OpenCode, Copilot, Continue, Goose, DeepSeek). cache/ and
   marketplaces/ copies are tagged, not treated as extra unique skills.
-  --fix prints a dry-run cleanup plan plus questions. Progress writes
-  to stderr when the terminal is a TTY.
+  --fix prints a dry-run markdown inventory (keep vs orphans) and writes
+  skillcrit-cleanup.md. --out <file> chooses the path; --out - skips the
+  write. Progress writes to stderr when the terminal is a TTY.
 `;
+}
+
+const BLOCKED_OUT = new Set(["skill.md", "package.json", ".env", "license"]);
+
+function writeCleanupDoc(out: string | undefined, markdown: string): void {
+  if (!out || out === "-") return;
+  const resolved = path.resolve(out);
+  const base = path.basename(resolved).toLowerCase();
+  if (BLOCKED_OUT.has(base)) {
+    throw new Error(`refusing to write cleanup doc over ${path.basename(resolved)}`);
+  }
+  fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  fs.writeFileSync(resolved, markdown);
 }

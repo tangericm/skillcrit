@@ -1,9 +1,11 @@
-import { compareSkills, labelSkill } from "./origin.js";
+import { compareSkills, compareVersions, labelSkill } from "./origin.js";
 import { cleanupQuestions, tokenComparison } from "./summary.js";
 import type {
   CleanupAction,
+  CleanupKind,
   LintFinding,
   LintReport,
+  SkillOrigin,
   SkillRecord
 } from "./types.js";
 
@@ -64,7 +66,8 @@ export function lint(skills: SkillRecord[]): LintReport {
         rule: "spec",
         severity: "error",
         skills: [skill.name],
-        message: issue
+        message: issue,
+        keep: skill.skillDir
       });
     }
   }
@@ -133,15 +136,17 @@ function duplicateCopies(
       keep: keep.skillFile,
       drop: drop.map((s) => s.skillFile)
     });
-    cleanup.push({
-      kind: extrasAreMirrors ? "ignore-mirror" : "drop-copy",
-      keep: keep.skillFile,
-      drop: drop.map((s) => s.skillFile),
-      reason: extrasAreMirrors
-        ? "identical cache/marketplace mirrors; safe to ignore or delete extras"
-        : `identical copies of ${keep.name}; keep the ${keep.origin} path and remove extras to cut always-on tokens`,
-      harmful: !extrasAreMirrors
-    });
+    cleanup.push(
+      cleanupFrom(
+        extrasAreMirrors ? "ignore-mirror" : "drop-copy",
+        [keep],
+        drop,
+        extrasAreMirrors
+          ? "identical cache/marketplace mirrors; safe to ignore or delete extras"
+          : `identical copies of ${keep.name}; keep the ${keep.origin} path and remove extras to cut always-on tokens`,
+        !extrasAreMirrors
+      )
+    );
   }
   return findings;
 }
@@ -180,13 +185,15 @@ function versionConflicts(
       keep: keep.skillFile,
       drop: drop.map((s) => s.skillFile)
     });
-    cleanup.push({
-      kind: "pick-version",
-      keep: keep.skillFile,
-      drop: drop.map((s) => s.skillFile),
-      reason: `multiple versions of ${name}; disable or remove older/lower-rank copies`,
-      harmful: true
-    });
+    cleanup.push(
+      cleanupFrom(
+        "pick-version",
+        [keep],
+        drop,
+        `multiple versions of ${name}; disable or remove older/lower-rank copies`,
+        true
+      )
+    );
   }
   return findings;
 }
@@ -224,13 +231,15 @@ function contentionClusters(
       }
     }
     if (drop.length === 0) continue;
-    cleanup.push({
-      kind: "prefer-skill",
-      keep: keep[0].skillFile,
-      drop: drop.map((s) => s.skillFile),
-      reason: `overlapping triggers; keep ${keep.map(labelSkill).join(", ")} enabled and consider disabling the rest`,
-      harmful: true
-    });
+    cleanup.push(
+      cleanupFrom(
+        "prefer-skill",
+        keep,
+        drop,
+        `overlapping triggers; keep ${keep.map(labelSkill).join(", ")} enabled and consider disabling the rest`,
+        true
+      )
+    );
   }
   return findings;
 }
@@ -328,31 +337,130 @@ export function sharedPhrases(a: string, b: string): string[] {
 }
 
 export function cleanupPlan(report: LintReport): string {
+  const spec = report.findings.filter((f) => f.rule === "spec");
   const lines = [
-    "# skillcrit cleanup plan (dry-run; no files deleted)",
-    `# ${report.unique} unique / ${report.scanned} scanned`,
+    "# skillcrit cleanup",
+    "",
+    "Dry-run. No skill files were deleted or modified.",
+    "",
+    `${report.unique} unique / ${report.scanned} scanned`,
     ""
   ];
-  if (report.cleanup.length === 0) {
-    lines.push("# nothing to organize");
-    return lines.join("\n") + "\n";
+  if (report.cleanup.length === 0 && spec.length === 0) {
+    lines.push("Nothing to organize.", "");
+    return lines.join("\n");
   }
   for (const action of report.cleanup) {
-    lines.push(`# ${action.kind}${action.harmful ? " (review)" : " (harmless mirrors/copies)"}`);
-    lines.push(`# ${action.reason}`);
-    lines.push(`# keep: ${action.keep}`);
-    for (const drop of action.drop) {
-      if (action.kind === "ignore-mirror") {
-        lines.push(`# ignore ${JSON.stringify(drop)} (cache/marketplace mirror)`);
-      } else if (action.kind === "drop-copy") {
-        lines.push(`# rm ${JSON.stringify(drop)}`);
-      } else {
-        lines.push(`# disable or remove ${JSON.stringify(drop)}`);
+    lines.push(`## ${action.name} — ${sectionTitle(action)}`);
+    lines.push("");
+    lines.push(action.reason);
+    lines.push("");
+    lines.push(`**Keep** (${labelKeep(action)})`);
+    lines.push("");
+    for (const dir of action.keepDirs) lines.push(`- \`${dir}\``);
+    lines.push("");
+    if (action.orphans.length > 0) {
+      const verb =
+        action.kind === "ignore-mirror"
+          ? "optional ignore/delete"
+          : "delete or disable";
+      lines.push(`**Orphans** (${verb})`);
+      lines.push("");
+      for (const orphan of action.orphans) {
+        lines.push(`- \`${orphan.dir}\` — ${orphan.why}`);
       }
+      lines.push("");
+    }
+  }
+  if (spec.length > 0) {
+    lines.push("## Spec errors");
+    lines.push("");
+    lines.push("**Orphans** (fix or delete)");
+    lines.push("");
+    for (const finding of spec) {
+      const dir = finding.keep ?? finding.skills[0];
+      lines.push(`- \`${dir}\` — ${finding.message}`);
     }
     lines.push("");
   }
   return lines.join("\n");
+}
+
+function cleanupFrom(
+  kind: CleanupKind,
+  keepers: SkillRecord[],
+  drop: SkillRecord[],
+  reason: string,
+  harmful: boolean
+): CleanupAction {
+  const keep = keepers[0];
+  return {
+    kind,
+    name: keepers.map((s) => s.name).join(", "),
+    keep: keep.skillFile,
+    drop: drop.map((s) => s.skillFile),
+    reason,
+    harmful,
+    keepDirs: keepers.map((s) => s.skillDir),
+    keepOrigin: keep.origin,
+    keepVersion: keep.version,
+    orphans: drop.map((s) => ({
+      dir: s.skillDir,
+      origin: s.origin,
+      version: s.version,
+      why: orphanWhy(kind, keep, s)
+    }))
+  };
+}
+
+function sectionTitle(action: CleanupAction): string {
+  switch (action.kind) {
+    case "drop-copy":
+      return "identical copies";
+    case "ignore-mirror":
+      return "cache/marketplace mirrors";
+    case "pick-version":
+      return "version conflict";
+    case "prefer-skill":
+      return "overlapping triggers";
+  }
+}
+
+function labelKeep(action: CleanupAction): string {
+  const ver = action.keepVersion ? `@${action.keepVersion}` : "unversioned";
+  return `${action.keepOrigin} ${ver}`;
+}
+
+function orphanWhy(
+  kind: CleanupKind,
+  keep: SkillRecord,
+  drop: SkillRecord
+): string {
+  const dropVer = formatVer(drop.origin, drop.version);
+  if (kind === "ignore-mirror") {
+    return `${drop.origin} mirror of ${keep.origin}`;
+  }
+  if (kind === "drop-copy") {
+    return `identical copy (${dropVer})`;
+  }
+  if (kind === "pick-version") {
+    const bits: string[] = [];
+    if (drop.origin !== keep.origin) {
+      bits.push(`${drop.origin} outranked by ${keep.origin}`);
+    }
+    if (compareVersions(keep.version, drop.version) > 0) {
+      bits.push(`older ${formatVer(drop.origin, drop.version)}`);
+    } else if (drop.version && keep.version && drop.version !== keep.version) {
+      bits.push(`${dropVer} vs keep ${formatVer(keep.origin, keep.version)}`);
+    }
+    if (drop.specIssues[0]) bits.push(drop.specIssues[0]);
+    return bits.join("; ") || dropVer;
+  }
+  return `overlapping triggers; ${dropVer}, lower rank than ${keep.name}`;
+}
+
+function formatVer(origin: SkillOrigin, version: string | null): string {
+  return version ? `${origin} @${version}` : origin;
 }
 
 function contentNgrams(text: string, n: number): string[] {
