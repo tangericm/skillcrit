@@ -1,8 +1,16 @@
-# skillcrit
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="skillcrit" />
+</p>
 
-Lint stacked [Agent Skills](https://agentskills.io) packs and eval a pack **on vs off**.
+<h1 align="center">skillcrit</h1>
 
-[![skills.sh](docs/badge.svg)](https://skills.sh/tangericm/skillcrit)
+<p align="center">
+  Lint stacked [Agent Skills](https://agentskills.io) packs and eval a pack <strong>on vs off</strong>.
+</p>
+
+<p align="center">
+  <a href="https://skills.sh/tangericm/skillcrit"><img src="docs/badge.svg" alt="skillcrit" /></a>
+</p>
 
 ## Install
 
