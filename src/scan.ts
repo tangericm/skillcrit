@@ -20,7 +20,15 @@ const PLUGIN_MANIFESTS = [
 
 const ALWAYS_ON_BODY = /ACTIVE EVERY RESPONSE|every turn/i;
 
-const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "coverage"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "dist",
+  "coverage",
+  "cache",
+  "marketplaces",
+  "fixtures"
+]);
 
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 

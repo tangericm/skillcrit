@@ -75,4 +75,12 @@ describe("cli", () => {
     expect(result.status).toBe(0);
     expect(result.stdout).toMatch(/skillcrit scan/);
   });
+
+  it("prints the package version", async () => {
+    const result = await run(["--version"]);
+    expect(result.status).toBe(0);
+    expect(result.stdout).toMatch(/^skillcrit 0\.2\.0\n$/);
+    const dashV = await run(["-V"]);
+    expect(dashV.stdout).toBe(result.stdout);
+  });
 });

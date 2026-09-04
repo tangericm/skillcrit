@@ -1,6 +1,6 @@
 {
   "name": "skillcrit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Lint stacked Agent Skills packs and eval a pack on vs off.",
   "type": "module",
   "bin": {
@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
     "skillcrit": "tsx src/cli.ts"
@@ -32,6 +33,7 @@
     "url": "git+https://github.com/tangericm/skillcrit.git"
   },
   "keywords": [
+    "agent-skill",
     "agent-skills",
     "lint",
     "eval",

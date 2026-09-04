@@ -93,4 +93,35 @@ description: should not be scanned
     const names = scan(tmp).map((s) => s.name);
     expect(names).toEqual(["real"]);
   });
+
+  it("skips cache, marketplaces, and fixtures directories", () => {
+    const repoRoot = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      ".."
+    );
+    expect(scan(repoRoot).map((s) => s.name)).not.toContain("tdd-kit");
+    expect(scan(repoRoot).some((s) => s.name === "skillcrit")).toBe(true);
+
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-skip-"));
+    const keep = path.join(tmp, "skills", "keep");
+    const cache = path.join(tmp, "cache", "caveman");
+    const market = path.join(tmp, "marketplaces", "caveman");
+    fs.mkdirSync(keep, { recursive: true });
+    fs.mkdirSync(cache, { recursive: true });
+    fs.mkdirSync(market, { recursive: true });
+    const body = `---
+name: keep
+description: Unique keep skill for converting tables to RFC 4180 CSV only.
+---
+`;
+    const junk = `---
+name: caveman
+description: should not be scanned from cache
+---
+`;
+    fs.writeFileSync(path.join(keep, "SKILL.md"), body);
+    fs.writeFileSync(path.join(cache, "SKILL.md"), junk);
+    fs.writeFileSync(path.join(market, "SKILL.md"), junk);
+    expect(scan(tmp).map((s) => s.name)).toEqual(["keep"]);
+  });
 });

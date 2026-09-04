@@ -17,6 +17,7 @@ export type LintRule =
   | "spec"
   | "trigger-overlap"
   | "duplicate-command"
+  | "duplicate-copy"
   | "always-on"
   | "always-loaded-tokens";
 
@@ -30,6 +31,8 @@ export type LintFinding = {
 export type LintReport = {
   findings: LintFinding[];
   alwaysOnTokens: number;
+  scanned: number;
+  unique: number;
 };
 
 export type Metrics = {
