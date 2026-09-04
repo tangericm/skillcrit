@@ -55,7 +55,7 @@ describe("install surface", () => {
     expect(fs.existsSync(path.join(root, "docs/icon.png"))).toBe(true);
     expect(fs.statSync(path.join(root, "docs/icon.png")).size).toBeGreaterThan(1000);
     expect(pkg.description).toBe(
-      "Lint stacked Agent Skills packs and eval a pack on vs off."
+      "Find duplicate and conflicting Agent Skills, then eval a pack on vs off."
     );
     expect(readme).not.toMatch(/durable session position/);
     const cursor = JSON.parse(

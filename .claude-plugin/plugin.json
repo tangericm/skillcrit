@@ -1,6 +1,6 @@
 {
   "name": "skillcrit",
-  "description": "Lint stacked Agent Skills packs and eval a pack on vs off.",
+  "description": "Find duplicate and conflicting Agent Skills, then eval a pack on vs off.",
   "author": { "name": "Eric Tang" },
   "icon": "./docs/icon.png",
   "license": "MIT",

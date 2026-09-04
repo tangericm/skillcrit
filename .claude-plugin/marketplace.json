@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "skillcrit",
-  "description": "skillcrit: lint stacked Agent Skills packs and eval a pack on vs off.",
+  "description": "skillcrit: find duplicate and conflicting Agent Skills, then eval a pack on vs off.",
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {

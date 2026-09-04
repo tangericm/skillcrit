@@ -5,7 +5,7 @@
 <h1 align="center">skillcrit</h1>
 
 <p align="center">
-  Lint stacked [Agent Skills](https://agentskills.io) packs and eval a pack <strong>on vs off</strong>.
+  Find duplicate and conflicting [Agent Skills](https://agentskills.io), then eval a pack <strong>on vs off</strong>.
 </p>
 
 <p align="center">

@@ -1,7 +1,7 @@
 ---
 name: skillcrit
 description: >
-  Lint stacked Agent Skills packs and eval a pack on vs off. Use when the user
+  Find duplicate and conflicting Agent Skills, then eval a pack on vs off. Use when the user
   asks whether installed skills conflict, how many always-on tokens they add,
   whether a skill pack helps, where Qwen/Hermes/Pi/Codex skills live, or to
   run skillcrit / skill-pack evals.
