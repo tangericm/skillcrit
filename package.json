@@ -28,6 +28,11 @@
     "node": ">=22"
   },
   "license": "MIT",
+  "author": "Eric Tang <eric.tang22@gmail.com>",
+  "homepage": "https://github.com/tangericm/skillcrit#readme",
+  "bugs": {
+    "url": "https://github.com/tangericm/skillcrit/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tangericm/skillcrit.git"

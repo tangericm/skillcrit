@@ -7,6 +7,9 @@ description: >
   run skillcrit / skill-pack evals.
 license: MIT
 compatibility: Requires Node 22+ and the skillcrit CLI on PATH.
+metadata:
+  author: Eric Tang
+  repo: https://github.com/tangericm/skillcrit
 ---
 
 # skillcrit

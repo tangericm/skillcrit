@@ -8,7 +8,8 @@
       "name": "skillcrit",
       "description": "Lint skill-pack conflicts and run on/off evals.",
       "source": "./",
-      "category": "productivity"
+      "category": "productivity",
+      "license": "MIT"
     }
   ]
 }

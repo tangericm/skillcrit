@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")) as {
   name: string;
   version: string;
+  license: string;
   bin: { skillcrit: string };
   engines: { node: string };
   files: string[];
@@ -19,12 +20,26 @@ describe("install surface", () => {
     expect(pkg.bin.skillcrit).toBe("./dist/cli.js");
     expect(pkg.engines.node).toMatch(/>=22/);
     expect(pkg.files).toEqual(expect.arrayContaining(["dist", "skills", "fixtures/tasks"]));
+    expect(pkg.license).toBe("MIT");
   });
 
   it("has a valid skill and plugin manifests", () => {
     const skill = fs.readFileSync(path.join(root, "skills/skillcrit/SKILL.md"), "utf8");
     expect(skill).toMatch(/^---\nname: skillcrit\n/);
+    expect(skill).toMatch(/^license: MIT$/m);
     expect(skill).toMatch(/skillcrit roots/);
+    const skillLicense = fs.readFileSync(
+      path.join(root, "skills/skillcrit/LICENSE"),
+      "utf8"
+    );
+    const rootLicense = fs.readFileSync(path.join(root, "LICENSE"), "utf8");
+    expect(skillLicense).toBe(rootLicense);
+    expect(rootLicense).toMatch(/MIT License/);
+    expect(rootLicense).toMatch(/Copyright \(c\) 2026 Eric Tang/);
+    const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
+    expect(readme).toMatch(/npx skills add tangericm\/skillcrit/);
+    expect(readme).toMatch(/skills\.sh\/b\/tangericm\/skillcrit/);
+    expect(readme).toMatch(/\[LICENSE\]\(LICENSE\)/);
     const cursor = JSON.parse(
       fs.readFileSync(path.join(root, ".cursor-plugin/plugin.json"), "utf8")
     ) as { version: string; skills: string };
@@ -32,9 +47,10 @@ describe("install surface", () => {
     expect(cursor.skills).toBe("./skills/");
     const claude = JSON.parse(
       fs.readFileSync(path.join(root, ".claude-plugin/plugin.json"), "utf8")
-    ) as { name: string; version?: string };
+    ) as { name: string; version?: string; license?: string };
     expect(claude.name).toBe("skillcrit");
     expect(claude.version).toBeUndefined();
+    expect(claude.license).toBe("MIT");
   });
 
   it("builds and the dist CLI scan/lint/eval/roots", () => {
