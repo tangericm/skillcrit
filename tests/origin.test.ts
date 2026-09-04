@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { compareVersions, detectOrigin, rankSkill } from "../src/origin.ts";
+import { compareSkills, compareVersions, detectOrigin, rankSkill } from "../src/origin.ts";
 import type { SkillRecord } from "../src/types.ts";
 
 function fake(partial: Partial<SkillRecord> & Pick<SkillRecord, "skillFile">): SkillRecord {
@@ -62,7 +62,7 @@ describe("detectOrigin", () => {
 });
 
 describe("rankSkill", () => {
-  it("prefers project over cache and newer semver", () => {
+  it("prefers project over cache even when the cache copy is newer", () => {
     const project = fake({
       skillFile: "/proj/SKILL.md",
       origin: "project",
@@ -73,7 +73,24 @@ describe("rankSkill", () => {
       origin: "cache",
       version: "9.0.0"
     });
+    expect(compareSkills(project, cache)).toBeGreaterThan(0);
     expect(rankSkill(project)).toBeGreaterThan(rankSkill(cache));
+  });
+
+  it("compares SemVer components without packing them into base-100", () => {
+    expect(compareVersions("2.0.0", "1.101.0")).toBeGreaterThan(0);
+    expect(compareVersions("1.100.0", "2.0.0")).toBeLessThan(0);
     expect(compareVersions("0.3.0", "0.2.1")).toBeGreaterThan(0);
+    const newer = fake({
+      skillFile: "/tmp/new/SKILL.md",
+      origin: "user",
+      version: "2.0.0"
+    });
+    const wideMinor = fake({
+      skillFile: "/tmp/old/SKILL.md",
+      origin: "user",
+      version: "1.101.0"
+    });
+    expect(compareSkills(newer, wideMinor)).toBeGreaterThan(0);
   });
 });

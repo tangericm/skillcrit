@@ -62,7 +62,7 @@ Identical copies in `.agents/skills` and `.claude/skills` are a real `duplicate-
 
 Project dirs: `.agents/skills`, `.claude/skills`, `.cursor/skills`, `.codex/skills`, `skills/`, `plugins/*/skills`.
 
-Each skill is tagged with an origin (`project` | `user` | `marketplace` | `cache`) and a version when one exists (`plugin.json`, `package.json`, `metadata.version`, or `@x.y.z` in the path). When several copies contend, skillcrit ranks **project > user > marketplace > cache**, then newer semver, then more specific descriptions, and penalizes always-on.
+Each skill is tagged with an origin (`project` | `user` | `marketplace` | `cache`) and a version when one exists (`plugin.json`, `package.json`, `metadata.version`, or `@x.y.z` in the path). When several copies contend, skillcrit ranks **project > user > marketplace > cache**, then newer semver (component by component, not packed into a single integer), then more specific descriptions, and penalizes always-on. An overlap *chain* (A overlaps B, B overlaps C, A does not overlap C) keeps A and C; only skills that share a trigger with a kept skill are marked to disable.
 
 | Rule | Meaning |
 |---|---|

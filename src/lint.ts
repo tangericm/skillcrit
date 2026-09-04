@@ -1,4 +1,4 @@
-import { labelSkill, rankSkill } from "./origin.js";
+import { compareSkills, labelSkill } from "./origin.js";
 import type {
   CleanupAction,
   LintFinding,
@@ -49,7 +49,7 @@ export function lint(skills: SkillRecord[]): LintReport {
   }
 
   const unique = [...groups.values()].map(
-    (group) => [...group].sort((a, b) => rankSkill(b) - rankSkill(a))[0]
+    (group) => [...group].sort(byRankDesc)[0]
   );
   const findings: LintFinding[] = [];
   const cleanup: CleanupAction[] = [];
@@ -112,7 +112,7 @@ function duplicateCopies(
   const findings: LintFinding[] = [];
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const ranked = [...group].sort((a, b) => rankSkill(b) - rankSkill(a));
+    const ranked = [...group].sort(byRankDesc);
     const keep = ranked[0];
     const drop = ranked.slice(1);
     const extrasAreMirrors = drop.every(
@@ -159,11 +159,11 @@ function versionConflicts(
     for (const skill of group) {
       const key = identityKey(skill);
       const prev = variants.get(key);
-      if (!prev || rankSkill(skill) > rankSkill(prev)) variants.set(key, skill);
+      if (!prev || compareSkills(skill, prev) > 0) variants.set(key, skill);
     }
     const distinct = [...variants.values()];
     if (distinct.length < 2) continue;
-    const ranked = distinct.sort((a, b) => rankSkill(b) - rankSkill(a));
+    const ranked = distinct.sort(byRankDesc);
     const keep = ranked[0];
     const drop = ranked.slice(1);
     const versions = ranked
@@ -195,36 +195,71 @@ function contentionClusters(
   const clusters = overlapClusters(skills);
   const findings: LintFinding[] = [];
   for (const members of clusters) {
-    const ranked = [...members].sort((a, b) => rankSkill(b) - rankSkill(a));
-    const keep = ranked[0];
-    const drop = ranked.slice(1);
-    const phrase =
-      sharedPhrases(ranked[0].description, ranked[1].description)[0] ??
-      "the same trigger";
+    const ranked = [...members].sort(byRankDesc);
+    const { keep, drop } = independentSet(members);
+    const phrase = firstOverlapPhrase(members) ?? "the same trigger";
     const order = ranked.map((s) => labelSkill(s)).join(" > ");
+    const keepNames = keep.map((s) => s.name).join(", ");
     findings.push({
       rule: "contention",
       severity: "warning",
       skills: ranked.map((s) => s.name),
-      message: `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Prefer ${keep.name}.`,
-      keep: keep.skillFile,
+      message: `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Keep ${keepNames}.`,
+      keep: keep[0].skillFile,
       drop: drop.map((s) => s.skillFile)
     });
-    findings.push({
-      rule: "trigger-overlap",
-      severity: "warning",
-      skills: ranked.map((s) => s.name),
-      message: `${ranked.map((s) => s.name).join(" / ")} share “${phrase}”`
-    });
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const shared = sharedPhrases(members[i].description, members[j].description);
+        if (shared.length === 0) continue;
+        findings.push({
+          rule: "trigger-overlap",
+          severity: "warning",
+          skills: [members[i].name, members[j].name],
+          message: `${members[i].name} / ${members[j].name} share “${shared[0]}”`
+        });
+      }
+    }
+    if (drop.length === 0) continue;
     cleanup.push({
       kind: "prefer-skill",
-      keep: keep.skillFile,
+      keep: keep[0].skillFile,
       drop: drop.map((s) => s.skillFile),
-      reason: `overlapping triggers; keep ${labelSkill(keep)} enabled and consider disabling the rest`,
+      reason: `overlapping triggers; keep ${keep.map(labelSkill).join(", ")} enabled and consider disabling the rest`,
       harmful: true
     });
   }
   return findings;
+}
+
+function byRankDesc(a: SkillRecord, b: SkillRecord): number {
+  return compareSkills(b, a);
+}
+
+function independentSet(members: SkillRecord[]): {
+  keep: SkillRecord[];
+  drop: SkillRecord[];
+} {
+  const keep: SkillRecord[] = [];
+  const drop: SkillRecord[] = [];
+  for (const skill of [...members].sort(byRankDesc)) {
+    const conflicts = keep.some(
+      (kept) => sharedPhrases(kept.description, skill.description).length > 0
+    );
+    if (conflicts) drop.push(skill);
+    else keep.push(skill);
+  }
+  return { keep, drop };
+}
+
+function firstOverlapPhrase(members: SkillRecord[]): string | undefined {
+  for (let i = 0; i < members.length; i++) {
+    for (let j = i + 1; j < members.length; j++) {
+      const shared = sharedPhrases(members[i].description, members[j].description);
+      if (shared[0]) return shared[0];
+    }
+  }
+  return undefined;
 }
 
 function overlapClusters(skills: SkillRecord[]): SkillRecord[][] {

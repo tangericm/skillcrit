@@ -46,12 +46,24 @@ const ORIGIN_RANK: Record<SkillOrigin, number> = {
   cache: 0
 };
 
+/** Higher means keep this skill over `b`. Origin, then SemVer, then not-always-on, then specificity. */
+export function compareSkills(a: SkillRecord, b: SkillRecord): number {
+  const origin = ORIGIN_RANK[a.origin] - ORIGIN_RANK[b.origin];
+  if (origin) return origin;
+  const ver = compareVersions(a.version, b.version);
+  if (ver) return ver;
+  if (a.alwaysOn !== b.alwaysOn) return a.alwaysOn ? -1 : 1;
+  const spec =
+    Math.min(a.description.length, 400) - Math.min(b.description.length, 400);
+  if (spec) return spec;
+  return a.skillFile.localeCompare(b.skillFile);
+}
+
 export function rankSkill(skill: SkillRecord): number {
   const originScore = ORIGIN_RANK[skill.origin] * 1_000_000;
-  const versionScore = versionRank(skill.version);
   const alwaysPenalty = skill.alwaysOn ? -8 : 0;
   const specificity = Math.min(skill.description.length, 400) / 40;
-  return originScore + versionScore + alwaysPenalty + specificity;
+  return originScore + alwaysPenalty + specificity;
 }
 
 export function labelSkill(skill: SkillRecord): string {
@@ -65,10 +77,4 @@ function parseSemver(version: string | null): [number, number, number] | null {
   const m = version.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
   if (!m) return null;
   return [Number(m[1]), Number(m[2]), Number(m[3])];
-}
-
-function versionRank(version: string | null): number {
-  const p = parseSemver(version);
-  if (!p) return 0;
-  return p[0] * 10000 + p[1] * 100 + p[2];
 }

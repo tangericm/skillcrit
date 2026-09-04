@@ -34,7 +34,7 @@ skillcrit eval <pack-dir> --agent stub --json
 - Project lint (no `--user`) is the current repo: `.agents/skills`, `.claude/skills`, `.cursor/skills`, `.codex/skills`, `skills/`, `plugins/`.
 - `--user` adds `~/.agents/skills` and Claude/Cursor/Codex plugin trees. `cache/` and `marketplaces/` copies are tagged (`origin: cache|marketplace`) and collapsed when the body matches, not skipped. `fixtures/` and `node_modules/` are still skipped.
 - Identical copies of one skill (same name and body at two live paths, e.g. `.agents` and `.claude`) are `duplicate-copy` (warning). Cache/marketplace mirrors of that body are `duplicate-copy` at info severity.
-- Same name with different bodies/versions is `version-conflict`. Overlapping triggers become a `contention` cluster with a keep/disable order (project > user > marketplace > cache, then newer semver).
+- Same name with different bodies/versions is `version-conflict`. Overlapping triggers become a `contention` cluster with a keep/disable order (project > user > marketplace > cache, then newer semver). Skills that do not share a trigger with a kept skill stay enabled.
 - `--fix` prints a dry-run cleanup plan. It does not delete files. JSON lint reports include `cleanup[]`.
 - `eval` uses bundled fixtures. Default `--agent stub` needs no API key.
 
