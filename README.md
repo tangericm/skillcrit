@@ -7,11 +7,12 @@ This repository used to be `agent-loop`, a Claude Code / Codex workflow plugin. 
 ```
 skillcrit --version
 skillcrit scan [path] [--user]     # inventory of SKILL.md + plugin manifests
-skillcrit lint [path] [--user]     # conflicts, duplicates, always-on tokens
+skillcrit lint [path] [--user]     # conflicts, duplicates, versions, always-on tokens
+skillcrit lint [path] --fix        # dry-run cleanup plan (no deletes)
 skillcrit eval <pack>              # frozen tasks, pack on vs off
 ```
 
-Version is **0.2.0**, from `package.json` only (the Agent Skills spec / skillpm convention: do not duplicate version in `SKILL.md`). `skillcrit --version` prints it. Claude's `plugin.json` omits `version` so git-marketplace installs track the commit SHA.
+Version is **0.3.0**, from `package.json` only (the Agent Skills spec / skillpm convention: do not duplicate version in `SKILL.md`). `skillcrit --version` prints it. Claude's `plugin.json` omits `version` so git-marketplace installs track the commit SHA. Cursor's `plugin.json` tracks `package.json`.
 
 ## Install
 
@@ -53,51 +54,58 @@ Or `claude plugin marketplace add tangericm/skillcrit`. Then put the CLI on PATH
 | `skillcrit lint .` | This project only |
 | `skillcrit lint . --user` | This project **plus** user-level installs |
 
-`--user` walks `~/.agents/skills`, `~/.claude/plugins`, `~/.cursor/plugins`, and `~/.codex/plugins`, but skips `cache/`, `marketplaces/`, `fixtures/`, and `node_modules/`. That is what inflated the first run to 439 entries (the same plugin cached under Claude and Cursor, plus this repo's test fixtures inside the plugin cache).
+`--user` walks `~/.agents/skills`, `~/.claude/plugins`, `~/.cursor/plugins`, and `~/.codex/plugins`. `cache/` and `marketplaces/` copies are **tagged**, not skipped: they count toward `scanned` but collapse into one unique skill when the body matches. That is what used to inflate a run to 439 entries (the same plugin cached under Claude and Cursor, plus this repo's test fixtures inside the plugin cache). `fixtures/` and `node_modules/` are still skipped.
 
-Identical copies in `.agents/skills` and `.claude/skills` are a real `duplicate-copy`, not cache noise.
+Identical copies in `.agents/skills` and `.claude/skills` are a real `duplicate-copy` (warning). Cache/marketplace mirrors of the same body are `duplicate-copy` at **info** severity so you can clean plugin folders without treating mirrors as conflicts.
 
 ## What `lint` looks at
 
 Project dirs: `.agents/skills`, `.claude/skills`, `.cursor/skills`, `.codex/skills`, `skills/`, `plugins/*/skills`.
 
+Each skill is tagged with an origin (`project` | `user` | `marketplace` | `cache`) and a version when one exists (`plugin.json`, `package.json`, `metadata.version`, or `@x.y.z` in the path). When several copies contend, skillcrit ranks **project > user > marketplace > cache**, then newer semver, then more specific descriptions, and penalizes always-on.
+
 | Rule | Meaning |
 |---|---|
 | `spec` | `name` / `description` violate the Agent Skills spec (folder match, charset, length) |
 | `trigger-overlap` | two **distinct** skills share a distinctive `description` phrase |
+| `contention` | a cluster of overlapping skills plus a suggested keep/disable order |
 | `duplicate-command` | two packs register the same slash command |
 | `duplicate-copy` | the same skill body is installed at more than one path |
+| `version-conflict` | the same skill **name** exists as more than one body/version |
 | `always-on` | plugin hooks or `ACTIVE EVERY RESPONSE` / `every turn` bodies |
 | `always-loaded-tokens` | estimate (`chars / 4`) of unique skills' frontmatter plus always-on bodies |
 
+`--fix` prints a dry-run cleanup plan (`keep` / `rm` / `ignore` / `disable`). It does **not** delete files. JSON output includes a `cleanup[]` array with the same actions.
+
 It does **not** parse private session stores or ECC-private config.
 
-Exit code `1` when there is any error or warning (Claude Code's Bash panel will label that `Error` — it is not a crash).
+Exit code `1` when there is any error or warning (Claude Code's Bash panel will label that `Error` — it is not a crash). Info-only findings (harmless mirrors, token totals) do not fail the run.
 
 ## What `eval` measures
 
 A frozen task suite under `fixtures/tasks/`. Each task has a starting `repo/`, a minimal `on/` overlay, and an overbuilt `off/` overlay.
 
-`--agent stub` (default, used in CI) applies those overlays. It needs no API key. Real Claude / Codex adapters are not in v0.2.
+`--agent stub` (default, used in CI) applies those overlays. It needs no API key. Real Claude / Codex adapters are not in v0.3.
 
 Metrics per task: tests passed, source lines, overbuild vs the `on/` golden, wall time, tokens if the adapter reports them.
 
 ## Library
 
 ```ts
-import { scan, lint, evalPack, stubAdapter } from "skillcrit";
+import { scan, lint, cleanupPlan, evalPack, stubAdapter } from "skillcrit";
 
 const skills = scan(".");
 const report = lint(skills);
+console.log(cleanupPlan(report));
 const summary = await evalPack({
   packDir: "path/to/some-skill",
   adapter: stubAdapter
 });
 ```
 
-## Non-goals (v0.2)
+## Non-goals (v0.3)
 
-Another process kit. A hosted leaderboard. A cost-governor proxy. A merge queue.
+Another process kit. A hosted leaderboard. A cost-governor proxy. A merge queue. Auto-deleting skills from disk.
 
 ## License
 

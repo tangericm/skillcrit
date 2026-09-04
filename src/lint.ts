@@ -1,4 +1,10 @@
-import type { LintFinding, LintReport, SkillRecord } from "./types.js";
+import { labelSkill, rankSkill } from "./origin.js";
+import type {
+  CleanupAction,
+  LintFinding,
+  LintReport,
+  SkillRecord
+} from "./types.js";
 
 const STOP = new Set([
   "a",
@@ -42,10 +48,14 @@ export function lint(skills: SkillRecord[]): LintReport {
     groups.set(key, list);
   }
 
-  const unique = [...groups.values()].map((group) => group[0]);
+  const unique = [...groups.values()].map(
+    (group) => [...group].sort((a, b) => rankSkill(b) - rankSkill(a))[0]
+  );
   const findings: LintFinding[] = [];
+  const cleanup: CleanupAction[] = [];
 
-  findings.push(...duplicateCopies(groups));
+  findings.push(...duplicateCopies(groups, cleanup));
+  findings.push(...versionConflicts(skills, cleanup));
 
   for (const skill of unique) {
     for (const issue of skill.specIssues) {
@@ -58,7 +68,7 @@ export function lint(skills: SkillRecord[]): LintReport {
     }
   }
 
-  findings.push(...triggerOverlaps(unique));
+  findings.push(...contentionClusters(unique, cleanup));
   findings.push(...duplicateCommands(unique));
 
   let alwaysOnTokens = 0;
@@ -88,6 +98,7 @@ export function lint(skills: SkillRecord[]): LintReport {
 
   return {
     findings,
+    cleanup,
     alwaysOnTokens,
     scanned: skills.length,
     unique: unique.length
@@ -95,39 +106,158 @@ export function lint(skills: SkillRecord[]): LintReport {
 }
 
 function duplicateCopies(
-  groups: Map<string, SkillRecord[]>
+  groups: Map<string, SkillRecord[]>,
+  cleanup: CleanupAction[]
 ): LintFinding[] {
   const findings: LintFinding[] = [];
   for (const group of groups.values()) {
     if (group.length < 2) continue;
-    const paths = group.map((s) => s.skillFile).sort();
+    const ranked = [...group].sort((a, b) => rankSkill(b) - rankSkill(a));
+    const keep = ranked[0];
+    const drop = ranked.slice(1);
+    const extrasAreMirrors = drop.every(
+      (s) => s.origin === "cache" || s.origin === "marketplace"
+    );
+    const n = drop.length;
+    const copyWord = n === 1 ? "copy" : "copies";
     findings.push({
       rule: "duplicate-copy",
-      severity: "warning",
-      skills: group.map((s) => s.name),
-      message: `${group[0].name} is installed at ${group.length} paths: ${paths.join(", ")}`
+      severity: extrasAreMirrors ? "info" : "warning",
+      skills: ranked.map((s) => s.name),
+      message: extrasAreMirrors
+        ? `${keep.name} has ${n} harmless mirror ${copyWord} (cache/marketplace). Keep ${keep.skillFile}`
+        : `${keep.name} is installed at ${ranked.length} paths — organize to one copy. Keep ${keep.skillFile}. Also: ${drop.map((s) => s.skillFile).join(", ")}`,
+      keep: keep.skillFile,
+      drop: drop.map((s) => s.skillFile)
+    });
+    cleanup.push({
+      kind: extrasAreMirrors ? "ignore-mirror" : "drop-copy",
+      keep: keep.skillFile,
+      drop: drop.map((s) => s.skillFile),
+      reason: extrasAreMirrors
+        ? "identical cache/marketplace mirrors; safe to ignore or delete extras"
+        : `identical copies of ${keep.name}; keep the ${keep.origin} path and remove extras to cut always-on tokens`,
+      harmful: !extrasAreMirrors
     });
   }
   return findings;
 }
 
-function triggerOverlaps(skills: SkillRecord[]): LintFinding[] {
+function versionConflicts(
+  skills: SkillRecord[],
+  cleanup: CleanupAction[]
+): LintFinding[] {
+  const byName = new Map<string, SkillRecord[]>();
+  for (const skill of skills) {
+    const list = byName.get(skill.name) ?? [];
+    list.push(skill);
+    byName.set(skill.name, list);
+  }
   const findings: LintFinding[] = [];
-  for (let i = 0; i < skills.length; i++) {
-    for (let j = i + 1; j < skills.length; j++) {
-      const left = skills[i];
-      const right = skills[j];
-      const shared = sharedPhrases(left.description, right.description);
-      if (shared.length === 0) continue;
-      findings.push({
-        rule: "trigger-overlap",
-        severity: "warning",
-        skills: [left.name, right.name],
-        message: `${left.name} and ${right.name} both fire on “${shared[0]}”`
-      });
+  for (const [name, group] of byName) {
+    const variants = new Map<string, SkillRecord>();
+    for (const skill of group) {
+      const key = identityKey(skill);
+      const prev = variants.get(key);
+      if (!prev || rankSkill(skill) > rankSkill(prev)) variants.set(key, skill);
     }
+    const distinct = [...variants.values()];
+    if (distinct.length < 2) continue;
+    const ranked = distinct.sort((a, b) => rankSkill(b) - rankSkill(a));
+    const keep = ranked[0];
+    const drop = ranked.slice(1);
+    const versions = ranked
+      .map((s) => s.version ?? "unversioned")
+      .filter((v, i, all) => all.indexOf(v) === i);
+    findings.push({
+      rule: "version-conflict",
+      severity: "warning",
+      skills: ranked.map((s) => s.name),
+      message: `${name} has ${ranked.length} variants (${versions.join(" vs ")}). Prefer ${labelSkill(keep)} at ${keep.skillFile}`,
+      keep: keep.skillFile,
+      drop: drop.map((s) => s.skillFile)
+    });
+    cleanup.push({
+      kind: "pick-version",
+      keep: keep.skillFile,
+      drop: drop.map((s) => s.skillFile),
+      reason: `multiple versions of ${name}; disable or remove older/lower-rank copies`,
+      harmful: true
+    });
   }
   return findings;
+}
+
+function contentionClusters(
+  skills: SkillRecord[],
+  cleanup: CleanupAction[]
+): LintFinding[] {
+  const clusters = overlapClusters(skills);
+  const findings: LintFinding[] = [];
+  for (const members of clusters) {
+    const ranked = [...members].sort((a, b) => rankSkill(b) - rankSkill(a));
+    const keep = ranked[0];
+    const drop = ranked.slice(1);
+    const phrase =
+      sharedPhrases(ranked[0].description, ranked[1].description)[0] ??
+      "the same trigger";
+    const order = ranked.map((s) => labelSkill(s)).join(" > ");
+    findings.push({
+      rule: "contention",
+      severity: "warning",
+      skills: ranked.map((s) => s.name),
+      message: `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Prefer ${keep.name}.`,
+      keep: keep.skillFile,
+      drop: drop.map((s) => s.skillFile)
+    });
+    findings.push({
+      rule: "trigger-overlap",
+      severity: "warning",
+      skills: ranked.map((s) => s.name),
+      message: `${ranked.map((s) => s.name).join(" / ")} share “${phrase}”`
+    });
+    cleanup.push({
+      kind: "prefer-skill",
+      keep: keep.skillFile,
+      drop: drop.map((s) => s.skillFile),
+      reason: `overlapping triggers; keep ${labelSkill(keep)} enabled and consider disabling the rest`,
+      harmful: true
+    });
+  }
+  return findings;
+}
+
+function overlapClusters(skills: SkillRecord[]): SkillRecord[][] {
+  const n = skills.length;
+  const adj: number[][] = Array.from({ length: n }, () => []);
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (sharedPhrases(skills[i].description, skills[j].description).length === 0) {
+        continue;
+      }
+      adj[i].push(j);
+      adj[j].push(i);
+    }
+  }
+  const seen = new Set<number>();
+  const clusters: SkillRecord[][] = [];
+  for (let i = 0; i < n; i++) {
+    if (seen.has(i) || adj[i].length === 0) continue;
+    const stack = [i];
+    const members: SkillRecord[] = [];
+    seen.add(i);
+    while (stack.length) {
+      const u = stack.pop()!;
+      members.push(skills[u]);
+      for (const v of adj[u]) {
+        if (seen.has(v)) continue;
+        seen.add(v);
+        stack.push(v);
+      }
+    }
+    if (members.length >= 2) clusters.push(members);
+  }
+  return clusters;
 }
 
 function duplicateCommands(skills: SkillRecord[]): LintFinding[] {
@@ -157,6 +287,34 @@ export function sharedPhrases(a: string, b: string): string[] {
   const left = new Set(contentNgrams(a, 3));
   const right = contentNgrams(b, 3);
   return right.filter((phrase) => left.has(phrase));
+}
+
+export function cleanupPlan(report: LintReport): string {
+  const lines = [
+    "# skillcrit cleanup plan (dry-run; no files deleted)",
+    `# ${report.unique} unique / ${report.scanned} scanned`,
+    ""
+  ];
+  if (report.cleanup.length === 0) {
+    lines.push("# nothing to organize");
+    return lines.join("\n") + "\n";
+  }
+  for (const action of report.cleanup) {
+    lines.push(`# ${action.kind}${action.harmful ? " (review)" : " (harmless mirrors/copies)"}`);
+    lines.push(`# ${action.reason}`);
+    lines.push(`# keep: ${action.keep}`);
+    for (const drop of action.drop) {
+      if (action.kind === "ignore-mirror") {
+        lines.push(`# ignore ${JSON.stringify(drop)} (cache/marketplace mirror)`);
+      } else if (action.kind === "drop-copy") {
+        lines.push(`# rm ${JSON.stringify(drop)}`);
+      } else {
+        lines.push(`# disable or remove ${JSON.stringify(drop)}`);
+      }
+    }
+    lines.push("");
+  }
+  return lines.join("\n");
 }
 
 function contentNgrams(text: string, n: number): string[] {

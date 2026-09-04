@@ -79,8 +79,24 @@ describe("cli", () => {
   it("prints the package version", async () => {
     const result = await run(["--version"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/^skillcrit 0\.2\.0\n$/);
+    expect(result.stdout).toMatch(/^skillcrit 0\.3\.0\n$/);
     const dashV = await run(["-V"]);
     expect(dashV.stdout).toBe(result.stdout);
+  });
+
+  it("prints a cleanup plan with --fix", async () => {
+    const result = await run(["lint", stacked, "--fix"]);
+    expect(result.status).toBe(1);
+    expect(result.stdout).toMatch(/skillcrit cleanup plan/);
+    expect(result.stdout).toMatch(/keep:/);
+    expect(result.stdout).not.toMatch(/"findings"/);
+  });
+
+  it("includes cleanup actions in JSON lint output", async () => {
+    const result = await run(["lint", stacked, "--json"]);
+    const payload = JSON.parse(result.stdout);
+    expect(Array.isArray(payload.cleanup)).toBe(true);
+    expect(payload.cleanup.length).toBeGreaterThan(0);
+    expect(payload.unique).toBeLessThanOrEqual(payload.scanned);
   });
 });

@@ -26,13 +26,16 @@ Run **both** scopes when the user asks about installed skills in general:
 skillcrit --version
 skillcrit lint [path] --json
 skillcrit lint [path] --user --json
+skillcrit lint [path] --user --fix
 skillcrit scan [path] --json
 skillcrit eval <pack-dir> --agent stub --json
 ```
 
 - Project lint (no `--user`) is the current repo: `.agents/skills`, `.claude/skills`, `.cursor/skills`, `.codex/skills`, `skills/`, `plugins/`.
-- `--user` adds `~/.agents/skills` and Claude/Cursor/Codex plugin trees. It skips `cache/`, `marketplaces/`, `fixtures/`, and `node_modules/` so mirrored installs are not counted eight times.
-- Identical copies of one skill (same name and body at two paths, e.g. `.agents` and `.claude`) are `duplicate-copy`, not trigger-overlap-with-self.
+- `--user` adds `~/.agents/skills` and Claude/Cursor/Codex plugin trees. `cache/` and `marketplaces/` copies are tagged (`origin: cache|marketplace`) and collapsed when the body matches, not skipped. `fixtures/` and `node_modules/` are still skipped.
+- Identical copies of one skill (same name and body at two live paths, e.g. `.agents` and `.claude`) are `duplicate-copy` (warning). Cache/marketplace mirrors of that body are `duplicate-copy` at info severity.
+- Same name with different bodies/versions is `version-conflict`. Overlapping triggers become a `contention` cluster with a keep/disable order (project > user > marketplace > cache, then newer semver).
+- `--fix` prints a dry-run cleanup plan. It does not delete files. JSON lint reports include `cleanup[]`.
 - `eval` uses bundled fixtures. Default `--agent stub` needs no API key.
 
 Lint exit code 1 means findings (warnings or errors), not a crash. Print stdout. Do not average findings into a single score.

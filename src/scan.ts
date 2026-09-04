@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import matter from "gray-matter";
+import { detectOrigin } from "./origin.js";
 import { estimateTokens, type SkillRecord } from "./types.js";
 
 const PROJECT_SKILL_DIRS = [
@@ -25,8 +26,6 @@ const SKIP_DIRS = new Set([
   ".git",
   "dist",
   "coverage",
-  "cache",
-  "marketplaces",
   "fixtures"
 ]);
 
@@ -93,6 +92,8 @@ function parseSkill(skillFile: string, walkRoot: string): SkillRecord {
   const folder = path.basename(skillDir);
   const packRoot = findPackRoot(skillDir, walkRoot);
   const pack = packRoot ? packName(packRoot) : null;
+  const version = readVersion(data, packRoot, skillFile);
+  const origin = detectOrigin(skillFile);
   const commands = packRoot ? listCommands(packRoot) : [];
   const hooks = packRoot ? packHasHooks(packRoot) : false;
   const alwaysOn = hooks || ALWAYS_ON_BODY.test(body);
@@ -109,6 +110,8 @@ function parseSkill(skillFile: string, walkRoot: string): SkillRecord {
     description,
     body,
     pack,
+    version,
+    origin,
     commands,
     hooks,
     alwaysOn,
@@ -170,6 +173,51 @@ function packName(packRoot: string): string {
     }
   }
   return path.basename(packRoot);
+}
+
+function readVersion(
+  data: Record<string, unknown>,
+  packRoot: string | null,
+  skillFile: string
+): string | null {
+  const meta = data.metadata;
+  if (meta && typeof meta === "object" && meta !== null) {
+    const v = (meta as { version?: unknown }).version;
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  if (packRoot) {
+    for (const rel of PLUGIN_MANIFESTS) {
+      const file = path.join(packRoot, rel);
+      if (!fs.existsSync(file)) continue;
+      try {
+        const json = JSON.parse(fs.readFileSync(file, "utf8")) as {
+          version?: unknown;
+        };
+        if (json.version != null && String(json.version).trim()) {
+          return String(json.version).trim();
+        }
+      } catch {
+        // keep looking
+      }
+    }
+    const pkg = path.join(packRoot, "package.json");
+    if (fs.existsSync(pkg)) {
+      try {
+        const json = JSON.parse(fs.readFileSync(pkg, "utf8")) as {
+          version?: unknown;
+        };
+        if (json.version != null && String(json.version).trim()) {
+          return String(json.version).trim();
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+  const fromPath = skillFile
+    .replace(/\\/g, "/")
+    .match(/@v?(\d+\.\d+\.\d+[\w.-]*)/);
+  return fromPath ? fromPath[1] : null;
 }
 
 function listCommands(packRoot: string): string[] {

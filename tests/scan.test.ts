@@ -94,18 +94,26 @@ description: should not be scanned
     expect(names).toEqual(["real"]);
   });
 
-  it("skips cache, marketplaces, and fixtures directories", () => {
+  it("skips fixtures so a repo-root scan does not pick up stacked examples", () => {
     const repoRoot = path.resolve(
       path.dirname(fileURLToPath(import.meta.url)),
       ".."
     );
     expect(scan(repoRoot).map((s) => s.name)).not.toContain("tdd-kit");
     expect(scan(repoRoot).some((s) => s.name === "skillcrit")).toBe(true);
+  });
 
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-skip-"));
+  it("reads pack version from plugin.json and tags project origin", () => {
+    const alpha = scan(stacked).find((s) => s.name === "alpha-status");
+    expect(alpha?.version).toBe("1.2.3");
+    expect(alpha?.origin).toBe("project");
+  });
+
+  it("scans plugin cache and marketplace copies and tags their origin", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-origin-"));
     const keep = path.join(tmp, "skills", "keep");
-    const cache = path.join(tmp, "cache", "caveman");
-    const market = path.join(tmp, "marketplaces", "caveman");
+    const cache = path.join(tmp, "plugins", "cache", "caveman");
+    const market = path.join(tmp, "plugins", "marketplaces", "caveman");
     fs.mkdirSync(keep, { recursive: true });
     fs.mkdirSync(cache, { recursive: true });
     fs.mkdirSync(market, { recursive: true });
@@ -116,12 +124,21 @@ description: Unique keep skill for converting tables to RFC 4180 CSV only.
 `;
     const junk = `---
 name: caveman
-description: should not be scanned from cache
+description: cached caveman skill for converting tables to RFC 4180 CSV only.
 ---
 `;
     fs.writeFileSync(path.join(keep, "SKILL.md"), body);
     fs.writeFileSync(path.join(cache, "SKILL.md"), junk);
     fs.writeFileSync(path.join(market, "SKILL.md"), junk);
-    expect(scan(tmp).map((s) => s.name)).toEqual(["keep"]);
+    const records = scan(tmp);
+    expect(records.map((s) => s.name).sort()).toEqual(["caveman", "caveman", "keep"]);
+    expect(records.find((s) => s.skillFile.includes(`${path.sep}cache${path.sep}`))?.origin).toBe(
+      "cache"
+    );
+    expect(
+      records.find((s) => s.skillFile.includes(`${path.sep}marketplaces${path.sep}`))?.origin
+    ).toBe("marketplace");
+    expect(records.find((s) => s.name === "keep")?.origin).toBe("project");
+    fs.rmSync(tmp, { recursive: true, force: true });
   });
 });
