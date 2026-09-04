@@ -1,13 +1,17 @@
 import { stubAdapter } from "./adapters/stub.js";
 import { evalPack } from "./eval.js";
-import { lint } from "./lint.js";
+import { cleanupPlan, lint } from "./lint.js";
+import { createProgress } from "./progress.js";
+import { formatRoots, listSkillLocations } from "./roots.js";
 import { scan } from "./scan.js";
+import { formatSummary } from "./summary.js";
 import type { Adapter } from "./types.js";
 import { packageVersion } from "./version.js";
 
 export async function main(argv: string[]): Promise<number> {
   const parsed = parseArgs(argv);
   const { command, target, json, user, tasks, agent, help, version } = parsed;
+  const progress = createProgress(!json && Boolean(process.stderr.isTTY));
 
   if (version || command === "version") {
     process.stdout.write(`skillcrit ${packageVersion()}\n`);
@@ -19,15 +23,31 @@ export async function main(argv: string[]): Promise<number> {
     return help || command ? 0 : 2;
   }
 
+  if (command === "roots") {
+    const locations = listSkillLocations(target ?? process.cwd(), { user: true });
+    if (json) {
+      process.stdout.write(JSON.stringify({ locations }, null, 2) + "\n");
+    } else {
+      process.stdout.write(formatRoots(locations));
+    }
+    return 0;
+  }
+
   if (command === "scan") {
-    const skills = scan(target ?? process.cwd(), { user });
+    progress.phase("scan");
+    const skills = scan(target ?? process.cwd(), {
+      user,
+      onProgress: (n) => progress.tick("scan", n)
+    });
+    progress.done(`scanned ${skills.length} skills`);
     if (json) {
       process.stdout.write(JSON.stringify({ skills }, null, 2) + "\n");
     } else {
       for (const skill of skills) {
         const pack = skill.pack ? ` [${skill.pack}]` : "";
+        const ver = skill.version ? `@${skill.version}` : "";
         process.stdout.write(
-          `${skill.name}${pack}  ${skill.descriptionTokens} tok\n`
+          `${skill.name}${ver}${pack}  ${skill.origin}  ${skill.descriptionTokens} tok\n`
         );
       }
       process.stdout.write(`${skills.length} skills\n`);
@@ -36,7 +56,22 @@ export async function main(argv: string[]): Promise<number> {
   }
 
   if (command === "lint") {
-    const report = lint(scan(target ?? process.cwd(), { user }));
+    progress.phase("scan");
+    const skills = scan(target ?? process.cwd(), {
+      user,
+      onProgress: (n) => progress.tick("scan", n)
+    });
+    progress.phase("lint");
+    const report = lint(skills);
+    progress.done(
+      `${report.unique} unique / ${report.scanned} scanned  ~${report.tokens.alwaysOnNow} tok`
+    );
+    if (parsed.fix && !json) {
+      process.stdout.write(cleanupPlan(report));
+      process.stdout.write(formatSummary(report));
+      const blocking = report.findings.filter((f) => f.severity !== "info");
+      return blocking.length > 0 ? 1 : 0;
+    }
     if (json) {
       process.stdout.write(JSON.stringify(report, null, 2) + "\n");
     } else {
@@ -45,9 +80,7 @@ export async function main(argv: string[]): Promise<number> {
           `${finding.severity} ${finding.rule}: ${finding.message}\n`
         );
       }
-      process.stdout.write(
-        `~${report.alwaysOnTokens} always-on tokens  ${report.unique} unique / ${report.scanned} scanned\n`
-      );
+      process.stdout.write(formatSummary(report));
     }
     const blocking = report.findings.filter((f) => f.severity !== "info");
     return blocking.length > 0 ? 1 : 0;
@@ -59,11 +92,16 @@ export async function main(argv: string[]): Promise<number> {
       return 2;
     }
     const adapter = resolveAdapter(agent);
+    progress.phase("eval");
     const summary = await evalPack({
       tasksDir: tasks,
       packDir: target,
-      adapter
+      adapter,
+      onProgress: (n, total, task) => progress.tick(task, n, total)
     });
+    progress.done(
+      `eval ${summary.results.length} tasks  overbuild Δ ${summary.overbuildDelta}`
+    );
     if (json) {
       process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
     } else {
@@ -83,7 +121,7 @@ export async function main(argv: string[]): Promise<number> {
 function resolveAdapter(agent: string): Adapter {
   if (agent === "stub" || agent === "") return stubAdapter;
   throw new Error(
-    `agent "${agent}" is not wired in v0.2; use --agent stub (claude/codex adapters come later)`
+    `agent "${agent}" is not wired in v0.4; use --agent stub (claude/codex adapters come later)`
   );
 }
 
@@ -99,7 +137,8 @@ function parseArgs(argv: string[]) {
       arg === "--user" ||
       arg === "--help" ||
       arg === "--version" ||
-      arg === "-V"
+      arg === "-V" ||
+      arg === "--fix"
     ) {
       flags.add(arg === "-V" ? "--version" : arg);
     } else if (arg === "--tasks" || arg === "--agent") {
@@ -117,6 +156,7 @@ function parseArgs(argv: string[]) {
     user: flags.has("--user"),
     help: flags.has("--help"),
     version: flags.has("--version"),
+    fix: flags.has("--fix"),
     tasks: kv.get("--tasks"),
     agent: kv.get("--agent") ?? "stub"
   };
@@ -126,11 +166,16 @@ function usage(): string {
   return `skillcrit ${packageVersion()} — lint stacked Agent Skills and eval a pack on vs off
 
   skillcrit --version
+  skillcrit roots [path] [--json]
   skillcrit scan [path] [--user] [--json]
-  skillcrit lint [path] [--user] [--json]
+  skillcrit lint [path] [--user] [--json] [--fix]
   skillcrit eval <pack-dir> [--tasks <dir>] [--agent stub] [--json]
 
   Default path is the current project. --user also scans installed
-  user-level skills (skips plugin cache/ and marketplaces/ mirrors).
+  user-level skills (Claude, Cursor, Codex, Qwen, Gemini, Hermes, Pi,
+  OpenCode, Copilot, Continue, Goose, DeepSeek). cache/ and
+  marketplaces/ copies are tagged, not treated as extra unique skills.
+  --fix prints a dry-run cleanup plan plus questions. Progress writes
+  to stderr when the terminal is a TTY.
 `;
 }

@@ -1,5 +1,6 @@
 {
   "name": "alpha-pack",
+  "version": "1.2.3",
   "description": "Alpha workflow pack",
   "hooks": {
     "SessionStart": [

@@ -1,16 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 import matter from "gray-matter";
+import { detectOrigin } from "./origin.js";
+import { collectRoots } from "./roots.js";
 import { estimateTokens, type SkillRecord } from "./types.js";
-
-const PROJECT_SKILL_DIRS = [
-  ".agents/skills",
-  ".claude/skills",
-  ".cursor/skills",
-  ".codex/skills",
-  "skills"
-];
 
 const PLUGIN_MANIFESTS = [
   ".claude-plugin/plugin.json",
@@ -25,8 +18,6 @@ const SKIP_DIRS = new Set([
   ".git",
   "dist",
   "coverage",
-  "cache",
-  "marketplaces",
   "fixtures"
 ]);
 
@@ -35,49 +26,69 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export type ScanOptions = {
   user?: boolean;
   extraRoots?: string[];
+  onProgress?: (n: number) => void;
 };
 
 export function scan(root: string, options: ScanOptions = {}): SkillRecord[] {
   const files = new Map<string, string>();
-  for (const dir of collectRoots(root, options)) {
-    const found = new Set<string>();
-    walkSkillFiles(dir, found);
-    for (const file of found) {
-      if (!files.has(file)) files.set(file, dir);
-    }
+  const seenReal = new Set<string>();
+  let n = 0;
+  for (const dir of collectRoots(root, options.extraRoots ?? [], options.user)) {
+    walkSkillFiles(dir, files, dir, seenReal, () => {
+      n += 1;
+      options.onProgress?.(n);
+    });
   }
   return [...files.entries()]
     .map(([file, walkRoot]) => parseSkill(file, walkRoot))
     .sort((a, b) => a.skillFile.localeCompare(b.skillFile));
 }
 
-function collectRoots(root: string, options: ScanOptions): string[] {
-  const roots = [
-    root,
-    ...PROJECT_SKILL_DIRS.map((rel) => path.join(root, rel)),
-    path.join(root, "plugins"),
-    ...(options.extraRoots ?? [])
-  ];
-  if (options.user) {
-    roots.push(
-      path.join(os.homedir(), ".agents/skills"),
-      path.join(os.homedir(), ".claude/plugins"),
-      path.join(os.homedir(), ".cursor/plugins"),
-      path.join(os.homedir(), ".codex/plugins")
-    );
+function walkSkillFiles(
+  dir: string,
+  out: Map<string, string>,
+  walkRoot: string,
+  seenReal: Set<string>,
+  onFile: () => void
+): void {
+  let real: string;
+  try {
+    if (!fs.existsSync(dir)) return;
+    real = fs.realpathSync(dir);
+  } catch {
+    return;
   }
-  return roots;
-}
-
-function walkSkillFiles(dir: string, out: Set<string>): void {
-  if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (SKIP_DIRS.has(entry.name)) continue;
-      walkSkillFiles(full, out);
-    } else if (entry.isFile() && entry.name === "SKILL.md") {
-      out.add(full);
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(real);
+  } catch {
+    return;
+  }
+  if (!stat.isDirectory()) return;
+  if (seenReal.has(real)) return;
+  seenReal.add(real);
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(real, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    const full = path.join(real, entry.name);
+    if (SKIP_DIRS.has(entry.name)) continue;
+    if (entry.name === "SKILL.md") {
+      try {
+        if (fs.statSync(full).isFile() && !out.has(full)) {
+          out.set(full, walkRoot);
+          onFile();
+        }
+      } catch {
+        // unreadable
+      }
+      continue;
+    }
+    if (entry.isDirectory() || entry.isSymbolicLink()) {
+      walkSkillFiles(full, out, walkRoot, seenReal, onFile);
     }
   }
 }
@@ -93,6 +104,8 @@ function parseSkill(skillFile: string, walkRoot: string): SkillRecord {
   const folder = path.basename(skillDir);
   const packRoot = findPackRoot(skillDir, walkRoot);
   const pack = packRoot ? packName(packRoot) : null;
+  const version = readVersion(data, packRoot, skillFile);
+  const origin = detectOrigin(skillFile);
   const commands = packRoot ? listCommands(packRoot) : [];
   const hooks = packRoot ? packHasHooks(packRoot) : false;
   const alwaysOn = hooks || ALWAYS_ON_BODY.test(body);
@@ -109,6 +122,8 @@ function parseSkill(skillFile: string, walkRoot: string): SkillRecord {
     description,
     body,
     pack,
+    version,
+    origin,
     commands,
     hooks,
     alwaysOn,
@@ -170,6 +185,51 @@ function packName(packRoot: string): string {
     }
   }
   return path.basename(packRoot);
+}
+
+function readVersion(
+  data: Record<string, unknown>,
+  packRoot: string | null,
+  skillFile: string
+): string | null {
+  const meta = data.metadata;
+  if (meta && typeof meta === "object" && meta !== null) {
+    const v = (meta as { version?: unknown }).version;
+    if (v != null && String(v).trim()) return String(v).trim();
+  }
+  if (packRoot) {
+    for (const rel of PLUGIN_MANIFESTS) {
+      const file = path.join(packRoot, rel);
+      if (!fs.existsSync(file)) continue;
+      try {
+        const json = JSON.parse(fs.readFileSync(file, "utf8")) as {
+          version?: unknown;
+        };
+        if (json.version != null && String(json.version).trim()) {
+          return String(json.version).trim();
+        }
+      } catch {
+        // keep looking
+      }
+    }
+    const pkg = path.join(packRoot, "package.json");
+    if (fs.existsSync(pkg)) {
+      try {
+        const json = JSON.parse(fs.readFileSync(pkg, "utf8")) as {
+          version?: unknown;
+        };
+        if (json.version != null && String(json.version).trim()) {
+          return String(json.version).trim();
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }
+  const fromPath = skillFile
+    .replace(/\\/g, "/")
+    .match(/@v?(\d+\.\d+\.\d+[\w.-]*)/);
+  return fromPath ? fromPath[1] : null;
 }
 
 function listCommands(packRoot: string): string[] {

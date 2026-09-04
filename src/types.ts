@@ -1,3 +1,5 @@
+export type SkillOrigin = "project" | "user" | "marketplace" | "cache";
+
 export type SkillRecord = {
   name: string;
   skillDir: string;
@@ -5,6 +7,8 @@ export type SkillRecord = {
   description: string;
   body: string;
   pack: string | null;
+  version: string | null;
+  origin: SkillOrigin;
   commands: string[];
   hooks: boolean;
   alwaysOn: boolean;
@@ -16,20 +20,59 @@ export type SkillRecord = {
 export type LintRule =
   | "spec"
   | "trigger-overlap"
+  | "contention"
   | "duplicate-command"
   | "duplicate-copy"
+  | "version-conflict"
   | "always-on"
   | "always-loaded-tokens";
+
+export type CleanupKind =
+  | "drop-copy"
+  | "ignore-mirror"
+  | "pick-version"
+  | "prefer-skill";
+
+export type CleanupAction = {
+  kind: CleanupKind;
+  keep: string;
+  drop: string[];
+  reason: string;
+  harmful: boolean;
+};
 
 export type LintFinding = {
   rule: LintRule;
   severity: "error" | "warning" | "info";
   skills: string[];
   message: string;
+  keep?: string;
+  drop?: string[];
+};
+
+export type CleanupQuestion = {
+  id: number;
+  kind: CleanupKind;
+  prompt: string;
+  keep: string;
+  drop: string[];
+  harmful: boolean;
+};
+
+export type TokenComparison = {
+  scanned: number;
+  unique: number;
+  alwaysOnNow: number;
+  afterCleanup: number;
+  saved: number;
+  descriptionOnly: number;
 };
 
 export type LintReport = {
   findings: LintFinding[];
+  cleanup: CleanupAction[];
+  questions: CleanupQuestion[];
+  tokens: TokenComparison;
   alwaysOnTokens: number;
   scanned: number;
   unique: number;

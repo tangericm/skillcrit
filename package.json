@@ -1,6 +1,6 @@
 {
   "name": "skillcrit",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Lint stacked Agent Skills packs and eval a pack on vs off.",
   "type": "module",
   "bin": {
@@ -28,6 +28,11 @@
     "node": ">=22"
   },
   "license": "MIT",
+  "author": "Eric Tang <eric.tang22@gmail.com>",
+  "homepage": "https://github.com/tangericm/skillcrit#readme",
+  "bugs": {
+    "url": "https://github.com/tangericm/skillcrit/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tangericm/skillcrit.git"
