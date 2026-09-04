@@ -13,8 +13,8 @@ skillcrit eval <pack>     # frozen tasks, pack on vs off: tests / overbuild / ti
 ## Install
 
 ```bash
-git clone https://github.com/tangericm/eric-tang-skills.git
-cd eric-tang-skills
+git clone https://github.com/tangericm/skillcrit.git
+cd skillcrit
 npm install
 npm test
 npx tsx src/cli.ts lint .
@@ -25,14 +25,14 @@ After `npm run build`, the `skillcrit` binary is `dist/cli.js`.
 As a skill (Claude Code / Cursor / anything that reads `SKILL.md`):
 
 ```bash
-npx skills add tangericm/eric-tang-skills --skill skillcrit
+npx skills add tangericm/skillcrit --skill skillcrit
 ```
 
 Or install this repo as a Claude Code marketplace plugin:
 
 ```bash
 claude plugin marketplace add <path-or-git-url>
-claude plugin install skillcrit@eric-tang-skills
+claude plugin install skillcrit@skillcrit
 ```
 
 ## What `lint` looks at
