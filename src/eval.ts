@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { runCommand } from "./run-command.js";
 import type { Adapter, EvalSummary, Metrics, TaskResult } from "./types.js";
 
 export type EvalOptions = {
@@ -68,10 +68,7 @@ async function runTask(
 function runTests(repo: string): boolean {
   const pkg = path.join(repo, "package.json");
   if (fs.existsSync(pkg)) {
-    const result = spawnSync("npm", ["test", "--silent"], {
-      cwd: repo,
-      encoding: "utf8"
-    });
+    const result = runCommand("npm", ["test", "--silent"], { cwd: repo });
     return result.status === 0;
   }
   return false;
