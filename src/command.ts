@@ -168,7 +168,7 @@ function parseArgs(argv: string[]) {
 }
 
 function usage(): string {
-  return `skillcrit ${packageVersion()} — find duplicate and conflicting Agent Skills, then eval a pack on vs off
+  return `skillcrit ${packageVersion()} — find skills that clash or are installed twice, then see if a pack actually helps
 
   skillcrit --version
   skillcrit roots [path] [--json]

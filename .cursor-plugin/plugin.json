@@ -1,7 +1,7 @@
 {
   "name": "skillcrit",
   "displayName": "skillcrit",
-  "description": "Find duplicate and conflicting Agent Skills, then eval a pack on vs off.",
+  "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
   "version": "0.4.0",
   "author": { "name": "Eric Tang" },
   "icon": "./docs/icon.png",

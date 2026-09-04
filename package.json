@@ -1,7 +1,7 @@
 {
   "name": "skillcrit",
   "version": "0.4.0",
-  "description": "Find duplicate and conflicting Agent Skills, then eval a pack on vs off.",
+  "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
   "type": "module",
   "bin": {
     "skillcrit": "./dist/cli.js"

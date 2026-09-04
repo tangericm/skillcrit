@@ -5,7 +5,7 @@
 <h1 align="center">skillcrit</h1>
 
 <p align="center">
-  Find duplicate and conflicting Agent Skills, then eval a pack <strong>on vs off</strong>.
+  Find skills that clash or are installed twice. See if a pack actually helps.
 </p>
 
 <p align="center">

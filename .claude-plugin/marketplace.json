@@ -1,12 +1,12 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "skillcrit",
-  "description": "skillcrit: find duplicate and conflicting Agent Skills, then eval a pack on vs off.",
+  "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {
       "name": "skillcrit",
-      "description": "Lint skill-pack conflicts and run on/off evals.",
+      "description": "Find skills that clash or are installed twice. See if a pack actually helps.",
       "source": "./",
       "category": "productivity",
       "license": "MIT"

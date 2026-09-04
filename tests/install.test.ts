@@ -55,7 +55,7 @@ describe("install surface", () => {
     expect(fs.existsSync(path.join(root, "docs/icon.png"))).toBe(true);
     expect(fs.statSync(path.join(root, "docs/icon.png")).size).toBeGreaterThan(1000);
     expect(pkg.description).toBe(
-      "Find duplicate and conflicting Agent Skills, then eval a pack on vs off."
+      "Find skills that clash or are installed twice. See if a pack actually helps."
     );
     expect(readme).not.toMatch(/durable session position/);
     const cursor = JSON.parse(
