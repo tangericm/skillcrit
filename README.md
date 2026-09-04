@@ -12,6 +12,8 @@ skillcrit eval <pack>     # frozen tasks, pack on vs off: tests / overbuild / ti
 
 ## Install
 
+Node 22 or newer. macOS, Linux, and Windows (PowerShell or cmd) are supported.
+
 ```bash
 git clone https://github.com/tangericm/skillcrit.git
 cd skillcrit
