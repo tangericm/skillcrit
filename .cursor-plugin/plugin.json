@@ -1,0 +1,10 @@
+{
+  "name": "skillcrit",
+  "displayName": "skillcrit",
+  "description": "Lint stacked Agent Skills packs and eval a pack on vs off.",
+  "version": "0.1.0",
+  "author": { "name": "Eric Tang" },
+  "license": "MIT",
+  "keywords": ["skills", "lint", "eval", "agentskills"],
+  "skills": "./skills/"
+}

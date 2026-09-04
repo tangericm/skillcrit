@@ -1,14 +1,14 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "eric-tang-skills",
-  "description": "Cross-engine agent workflow commands: durable session position, one-task execution, unattended plan runs, and adversarial review across Claude Code and Codex.",
+  "description": "skillcrit: lint stacked Agent Skills packs and eval a pack on vs off.",
   "owner": { "name": "Eric Tang" },
   "plugins": [
     {
-      "name": "agent-loop",
-      "description": "Durable session position and cross-engine review for any repository.",
-      "source": "./plugins/agent-loop",
-      "category": "workflow"
+      "name": "skillcrit",
+      "description": "Lint skill-pack conflicts and run on/off evals.",
+      "source": "./",
+      "category": "productivity"
     }
   ]
 }

@@ -1,0 +1,11 @@
+{
+  "name": "alpha-pack",
+  "description": "Alpha workflow pack",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [{ "type": "command", "command": "echo start" }]
+      }
+    ]
+  }
+}

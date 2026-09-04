@@ -2,3 +2,7 @@
 .agent/journal.md
 .DS_Store
 .superpowers/
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
