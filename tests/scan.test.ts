@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -58,5 +60,30 @@ describe("scan", () => {
     expect(csv?.descriptionTokens).toBe(
       Math.ceil((csv?.description.length ?? 0) / 4)
     );
+  });
+
+  it("does not walk node_modules when scanning", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-scan-"));
+    const realDir = path.join(tmp, "skills", "real");
+    const junkDir = path.join(tmp, "node_modules", "foo");
+    fs.mkdirSync(realDir, { recursive: true });
+    fs.mkdirSync(junkDir, { recursive: true });
+    const body = `---
+name: real
+description: Unique skill for converting tables to RFC 4180 CSV only.
+---
+# real
+`;
+    fs.writeFileSync(path.join(realDir, "SKILL.md"), body);
+    fs.writeFileSync(
+      path.join(junkDir, "SKILL.md"),
+      `---
+name: foo
+description: should not be scanned
+---
+`
+    );
+    const names = scan(tmp).map((s) => s.name);
+    expect(names).toEqual(["real"]);
   });
 });

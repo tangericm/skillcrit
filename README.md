@@ -22,7 +22,7 @@ npm test
 npx tsx src/cli.ts lint .
 ```
 
-After `npm run build`, the `skillcrit` binary is `dist/cli.js`.
+After `npm run build`, the `skillcrit` binary is `dist/cli.js`. Put it on PATH with `npm link` so Claude Code can run `skillcrit` without `cd`'ing into this clone.
 
 As a skill (Claude Code / Cursor / anything that reads `SKILL.md`):
 

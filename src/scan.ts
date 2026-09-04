@@ -20,6 +20,8 @@ const PLUGIN_MANIFESTS = [
 
 const ALWAYS_ON_BODY = /ACTIVE EVERY RESPONSE|every turn/i;
 
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist", "coverage"]);
+
 const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export type ScanOptions = {
@@ -60,6 +62,7 @@ function walkSkillFiles(dir: string, out: Set<string>): void {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
       walkSkillFiles(full, out);
     } else if (entry.isFile() && entry.name === "SKILL.md") {
       out.add(full);

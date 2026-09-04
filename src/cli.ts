@@ -2,15 +2,16 @@
 import path from "node:path";
 import { stubAdapter } from "./adapters/stub.js";
 import { evalPack } from "./eval.js";
+import { isCliEntry } from "./entry.js";
 import { lint } from "./lint.js";
 import { scan } from "./scan.js";
 import type { Adapter } from "./types.js";
 
 export async function main(argv: string[]): Promise<number> {
-  const { command, target, json, user, tasks, agent } = parseArgs(argv);
-  if (!command || command === "help" || command === "--help") {
+  const { command, target, json, user, tasks, agent, help } = parseArgs(argv);
+  if (help || !command || command === "help" || command === "--help") {
     process.stdout.write(usage());
-    return command ? 0 : 2;
+    return help || command ? 0 : 2;
   }
 
   if (command === "scan") {
@@ -86,7 +87,7 @@ function parseArgs(argv: string[]) {
   const positional: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
-    if (arg === "--json" || arg === "--user") {
+    if (arg === "--json" || arg === "--user" || arg === "--help") {
       flags.add(arg);
     } else if (arg === "--tasks" || arg === "--agent") {
       kv.set(arg, rest[++i] ?? "");
@@ -101,6 +102,7 @@ function parseArgs(argv: string[]) {
     target: positional[1],
     json: flags.has("--json"),
     user: flags.has("--user"),
+    help: flags.has("--help"),
     tasks: kv.get("--tasks"),
     agent: kv.get("--agent") ?? "stub"
   };
@@ -115,7 +117,7 @@ function usage(): string {
 `;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isCliEntry(import.meta.url, process.argv[1])) {
   main(process.argv).then(
     (code) => process.exit(code),
     (err) => {
