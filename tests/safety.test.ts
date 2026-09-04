@@ -143,7 +143,13 @@ describe("scan and lint stay inside the target tree", () => {
     );
     const skills = scan(project).filter((s) => s.name === "ok");
     expect(skills.length).toBeGreaterThanOrEqual(1);
-    expect(skills.every((s) => s.skillFile.startsWith(project))).toBe(true);
+    // macOS temp paths may use /var while the scanner returns /private/var.
+    // Compare canonical containment, not the spelling of the path alias.
+    for (const skill of skills) {
+      const relative = path.relative(fs.realpathSync(project), fs.realpathSync(skill.skillFile));
+      expect(path.isAbsolute(relative)).toBe(false);
+      expect(relative === ".." || relative.startsWith(`..${path.sep}`)).toBe(false);
+    }
   });
 
   it("does not pick up parent or sibling SKILL.md files", () => {
