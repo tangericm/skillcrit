@@ -33,12 +33,24 @@ export type CleanupKind =
   | "pick-version"
   | "prefer-skill";
 
+export type CleanupOrphan = {
+  dir: string;
+  origin: SkillOrigin;
+  version: string | null;
+  why: string;
+};
+
 export type CleanupAction = {
   kind: CleanupKind;
+  name: string;
   keep: string;
   drop: string[];
   reason: string;
   harmful: boolean;
+  keepDirs: string[];
+  keepOrigin: SkillOrigin;
+  keepVersion: string | null;
+  orphans: CleanupOrphan[];
 };
 
 export type LintFinding = {

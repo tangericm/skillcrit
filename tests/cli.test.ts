@@ -85,10 +85,11 @@ describe("cli", () => {
   });
 
   it("prints a cleanup plan with --fix", async () => {
-    const result = await run(["lint", stacked, "--fix"]);
+    const result = await run(["lint", stacked, "--fix", "--out", "-"]);
     expect(result.status).toBe(1);
-    expect(result.stdout).toMatch(/skillcrit cleanup plan/);
-    expect(result.stdout).toMatch(/keep:/);
+    expect(result.stdout).toMatch(/skillcrit cleanup/);
+    expect(result.stdout).toMatch(/\*\*Keep\*\*/);
+    expect(result.stdout).toMatch(/\*\*Orphans\*\*/);
     expect(result.stdout).toMatch(/skillcrit summary/);
     expect(result.stdout).toMatch(/## questions/);
     expect(result.stdout).not.toMatch(/"findings"/);
@@ -99,6 +100,8 @@ describe("cli", () => {
     const payload = JSON.parse(result.stdout);
     expect(Array.isArray(payload.cleanup)).toBe(true);
     expect(payload.cleanup.length).toBeGreaterThan(0);
+    expect(payload.cleanup[0].keepDirs.length).toBeGreaterThan(0);
+    expect(Array.isArray(payload.cleanup[0].orphans)).toBe(true);
     expect(payload.unique).toBeLessThanOrEqual(payload.scanned);
     expect(payload.questions.length).toBeGreaterThan(0);
     expect(payload.tokens.alwaysOnNow).toBeGreaterThan(0);

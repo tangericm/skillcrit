@@ -65,6 +65,7 @@ function walkSkillFiles(
     return;
   }
   if (!stat.isDirectory()) return;
+  if (!isInsideRoot(real, walkRoot)) return;
   if (seenReal.has(real)) return;
   seenReal.add(real);
   let entries: fs.Dirent[];
@@ -78,7 +79,11 @@ function walkSkillFiles(
     if (SKIP_DIRS.has(entry.name)) continue;
     if (entry.name === "SKILL.md") {
       try {
-        if (fs.statSync(full).isFile() && !out.has(full)) {
+        if (
+          isInsideRoot(full, walkRoot) &&
+          fs.statSync(full).isFile() &&
+          !out.has(full)
+        ) {
           out.set(full, walkRoot);
           onFile();
         }
@@ -91,6 +96,22 @@ function walkSkillFiles(
       walkSkillFiles(full, out, walkRoot, seenReal, onFile);
     }
   }
+}
+
+function isInsideRoot(candidate: string, root: string): boolean {
+  let realCandidate: string;
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync(root);
+    realCandidate = fs.realpathSync(candidate);
+  } catch {
+    return false;
+  }
+  const rel = path.relative(realRoot, realCandidate);
+  return (
+    rel === "" ||
+    (rel !== ".." && !rel.startsWith(".." + path.sep) && !path.isAbsolute(rel))
+  );
 }
 
 function parseSkill(skillFile: string, walkRoot: string): SkillRecord {

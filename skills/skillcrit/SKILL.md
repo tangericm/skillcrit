@@ -32,7 +32,7 @@ skillcrit --version
 skillcrit roots [path] --json
 skillcrit lint [path] --json
 skillcrit lint [path] --user --json
-skillcrit lint [path] --user --fix
+skillcrit lint [path] --user --fix --out skillcrit-cleanup.md
 skillcrit scan [path] --json
 skillcrit eval <pack-dir> --agent stub --json
 ```
@@ -45,8 +45,11 @@ skillcrit eval <pack-dir> --agent stub --json
   `plugins/`, and the other harness folders). `--user` adds the matching
   `$HOME` trees plus `/etc/codex/skills`.
 - Cache/marketplace copies are tagged and collapsed when the body matches.
-- `--fix` is a dry-run plan plus numbered cleanup questions and a token
-  comparison (now vs after recommended cleanup vs description-only).
+- `--fix` is a dry-run markdown inventory: each group lists the **Keep**
+  (super) directory — higher scope, newer version — then **Orphans** to
+  delete or disable. It writes `skillcrit-cleanup.md` (`--out -` skips the
+  write; `--out package.json` / `SKILL.md` / `.env` is refused). Then
+  numbered questions and a token comparison. It never deletes skill files.
 - `eval` uses bundled fixtures. Default `--agent stub` needs no API key.
 
 Lint exit code 1 means findings (warnings or errors), not a crash.
