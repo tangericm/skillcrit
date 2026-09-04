@@ -39,7 +39,7 @@ describe("install surface", () => {
     const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
     expect(readme).toMatch(/npx skills add tangericm\/skillcrit/);
     expect(readme).toMatch(/skills\.sh\/b\/tangericm\/skillcrit/);
-    expect(readme).toMatch(/\[LICENSE\]\(LICENSE\)/);
+    expect(readme).toMatch(/\[MIT\]\(LICENSE\)/);
     const cursor = JSON.parse(
       fs.readFileSync(path.join(root, ".cursor-plugin/plugin.json"), "utf8")
     ) as { version: string; skills: string };
