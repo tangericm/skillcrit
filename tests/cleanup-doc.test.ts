@@ -3,10 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { main } from "../src/command.ts";
+import type { SkillRecord } from "../src/types.ts";
 import { cleanupPlan, lint } from "../src/lint.ts";
 import { scan } from "../src/scan.ts";
-import type { SkillRecord } from "../src/types.ts";
+import { makeRecord } from "./support/record.ts";
+import { runCli } from "./support/cli.ts";
 
 const stacked = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -18,45 +19,7 @@ function rec(
   dir: string,
   extra: Partial<SkillRecord> = {}
 ): SkillRecord {
-  return {
-    name,
-    skillDir: dir,
-    skillFile: `${dir}/SKILL.md`,
-    description: extra.description ?? `${name} skill for converting tables to RFC 4180 CSV only.`,
-    body: extra.body ?? name,
-    pack: extra.pack ?? null,
-    version: extra.version ?? null,
-    origin: extra.origin ?? "project",
-    commands: extra.commands ?? [],
-    hooks: extra.hooks ?? false,
-    alwaysOn: extra.alwaysOn ?? false,
-    descriptionTokens: extra.descriptionTokens ?? 1,
-    alwaysOnTokens: extra.alwaysOnTokens ?? 1,
-    specIssues: extra.specIssues ?? []
-  };
-}
-
-async function run(args: string[]) {
-  const captured = { stdout: "", stderr: "" };
-  const origOut = process.stdout.write;
-  const origErr = process.stderr.write;
-  const tap =
-    (store: "stdout" | "stderr"): typeof process.stdout.write =>
-    (chunk, encoding, cb) => {
-      captured[store] += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
-      const done = typeof encoding === "function" ? encoding : cb;
-      done?.();
-      return true;
-    };
-  process.stdout.write = tap("stdout");
-  process.stderr.write = tap("stderr");
-  try {
-    const status = await main(["node", "skillcrit", ...args]);
-    return { status, ...captured };
-  } finally {
-    process.stdout.write = origOut;
-    process.stderr.write = origErr;
-  }
+  return makeRecord({ name, skillDir: dir, hash: `${name}:${dir}`, ...extra });
 }
 
 describe("cleanup markdown", () => {
@@ -79,7 +42,7 @@ describe("cleanup markdown", () => {
     expect(md).toMatch(/\/tmp\/live/);
     expect(md).toMatch(/\/tmp\/old-copy/);
     expect(md).toMatch(/project/);
-    expect(md).toMatch(/identical copy/i);
+    expect(md).toMatch(/identical instructions/i);
     expect(md).not.toMatch(/no files deleted[\s\S]*rm /);
   });
 
@@ -120,15 +83,17 @@ describe("cleanup markdown", () => {
     const out = path.join(dir, "skillcrit-cleanup.md");
     const pkg = path.join(dir, "package.json");
     fs.writeFileSync(pkg, '{"name":"app"}\n');
-    const result = await run(["lint", stacked, "--fix", "--out", out]);
+    const result = await runCli(["lint", stacked, "--fix", "--out", out]);
     expect(result.status).toBe(1);
     expect(fs.readFileSync(out, "utf8")).toMatch(/\*\*Keep\*\*/);
     expect(fs.readFileSync(out, "utf8")).toMatch(/\*\*Orphans\*\*/);
     expect(fs.readFileSync(pkg, "utf8")).toBe('{"name":"app"}\n');
 
-    await expect(run(["lint", stacked, "--fix", "--out", pkg])).rejects.toThrow(
-      /package\.json/
-    );
+    // A refused write is a run failure (exit 3), reported on stderr — not a
+    // rejected promise, so a caller can branch on the code.
+    const refused = await runCli(["lint", stacked, "--fix", "--out", pkg]);
+    expect(refused.status).toBe(3);
+    expect(refused.stderr).toMatch(/refusing to write cleanup doc over package\.json/);
     expect(fs.readFileSync(pkg, "utf8")).toBe('{"name":"app"}\n');
     fs.rmSync(dir, { recursive: true, force: true });
   });

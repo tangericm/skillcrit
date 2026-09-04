@@ -1,0 +1,253 @@
+import type { Severity } from "./types.js";
+
+/**
+ * Stable rule catalogue. IDs never change meaning: a CI gate, a suppression
+ * in `.skillcrit.json`, or a link in a review comment has to keep pointing at
+ * the same defect across releases. New checks take new IDs; a retired check
+ * keeps its ID reserved.
+ *
+ *   SC1xxx  Agent Skills spec conformance
+ *   SC2xxx  context budget (what the agent pays for every session)
+ *   SC3xxx  collisions between installed skills
+ *   SC4xxx  risk inventory (signals for human review, not a verdict)
+ */
+export type RuleId =
+  | "SC1001"
+  | "SC1002"
+  | "SC1003"
+  | "SC1004"
+  | "SC1005"
+  | "SC1006"
+  | "SC1007"
+  | "SC1008"
+  | "SC1009"
+  | "SC1010"
+  | "SC1011"
+  | "SC1012"
+  | "SC2001"
+  | "SC2002"
+  | "SC2003"
+  | "SC2004"
+  | "SC3001"
+  | "SC3002"
+  | "SC3003"
+  | "SC3004"
+  | "SC3005"
+  | "SC3006"
+  | "SC4001"
+  | "SC4002"
+  | "SC4003"
+  | "SC4004"
+  | "SC4005"
+  | "SC4006";
+
+export type RuleSpec = {
+  id: RuleId;
+  title: string;
+  severity: Severity;
+  /** What the reader should do about it. */
+  remediation: string;
+};
+
+export const RULES: Record<RuleId, RuleSpec> = {
+  SC1001: {
+    id: "SC1001",
+    title: "missing name",
+    severity: "error",
+    remediation: "Add a `name:` to the frontmatter that matches the folder."
+  },
+  SC1002: {
+    id: "SC1002",
+    title: "name does not match folder",
+    severity: "warning",
+    remediation:
+      "Rename the folder or the `name:` so they match. Clients load the skill anyway, but the spec requires the two to agree and collision handling keys on the name."
+  },
+  SC1003: {
+    id: "SC1003",
+    title: "name longer than 64 characters",
+    severity: "warning",
+    remediation: "Shorten `name:` to 64 characters or fewer."
+  },
+  SC1004: {
+    id: "SC1004",
+    title: "name is not lowercase-hyphenated",
+    severity: "warning",
+    remediation:
+      "Use lowercase letters, digits and single hyphens; no leading, trailing or consecutive hyphens."
+  },
+  SC1005: {
+    id: "SC1005",
+    title: "missing description",
+    severity: "error",
+    remediation:
+      "Add a `description:`. Conformant clients skip a skill with no description, so this one never loads."
+  },
+  SC1006: {
+    id: "SC1006",
+    title: "description longer than 1024 characters",
+    severity: "error",
+    remediation:
+      "Trim `description:` to 1024 characters. It is loaded for every session, so shorter is also cheaper."
+  },
+  SC1007: {
+    id: "SC1007",
+    title: "compatibility longer than 500 characters",
+    severity: "warning",
+    remediation: "Trim `compatibility:` to 500 characters."
+  },
+  SC1008: {
+    id: "SC1008",
+    title: "metadata is not a string map",
+    severity: "warning",
+    remediation:
+      "`metadata:` is a map of string keys to string values. Quote numeric values (`version: \"1.0\"`) and flatten nested objects."
+  },
+  SC1009: {
+    id: "SC1009",
+    title: "allowed-tools is not a space-separated string",
+    severity: "warning",
+    remediation:
+      "Write `allowed-tools:` as one space-separated string, e.g. `Bash(git:*) Read`."
+  },
+  SC1010: {
+    id: "SC1010",
+    title: "unrecognized frontmatter key",
+    severity: "info",
+    remediation:
+      "The spec defines name, description, license, compatibility, metadata and allowed-tools. Move client-specific keys under `metadata:`."
+  },
+  SC1011: {
+    id: "SC1011",
+    title: "frontmatter could not be parsed",
+    severity: "error",
+    remediation:
+      "Fix the YAML. The usual cause is an unquoted value containing a colon — quote it or use a block scalar."
+  },
+  SC1012: {
+    id: "SC1012",
+    title: "description does not say when to use the skill",
+    severity: "info",
+    remediation:
+      "Say what the skill does and when to reach for it. The model matches on this text alone; a description with no trigger wording rarely activates."
+  },
+  SC2001: {
+    id: "SC2001",
+    title: "body over the recommended instruction budget",
+    severity: "warning",
+    remediation:
+      "Keep SKILL.md under ~5000 tokens and move detail into `references/`. The whole body loads the moment the skill activates."
+  },
+  SC2002: {
+    id: "SC2002",
+    title: "body over 500 lines",
+    severity: "info",
+    remediation: "Split the body into `references/` files loaded on demand."
+  },
+  SC2003: {
+    id: "SC2003",
+    title: "always-on skill",
+    severity: "warning",
+    remediation:
+      "An always-on skill pays its full body on every turn, not just when relevant. Confirm that is intended."
+  },
+  SC2004: {
+    id: "SC2004",
+    title: "always-loaded token total",
+    severity: "info",
+    remediation: "Informational total for the whole installed estate."
+  },
+  SC3001: {
+    id: "SC3001",
+    title: "duplicate copy",
+    severity: "warning",
+    remediation:
+      "Keep one copy. Identical copies in several roots each cost catalogue tokens and make it ambiguous which path a fix should edit."
+  },
+  SC3002: {
+    id: "SC3002",
+    title: "version conflict",
+    severity: "warning",
+    remediation:
+      "Two different bodies share one name. Only the winner loads; remove or rename the loser."
+  },
+  SC3003: {
+    id: "SC3003",
+    title: "trigger contention",
+    severity: "warning",
+    remediation:
+      "Several skills describe the same trigger, so activation is a coin flip. Narrow the descriptions or disable all but one."
+  },
+  SC3004: {
+    id: "SC3004",
+    title: "overlapping trigger phrase",
+    severity: "warning",
+    remediation: "Reword one of the two descriptions so the shared phrase is unique."
+  },
+  SC3005: {
+    id: "SC3005",
+    title: "duplicate slash command",
+    severity: "warning",
+    remediation:
+      "Two packs register the same command name. Rename one; which one wins is client-specific."
+  },
+  SC3006: {
+    id: "SC3006",
+    title: "shadowed skill",
+    severity: "info",
+    remediation:
+      "Reserved for client-verified shadowing. Cleanup ranking alone cannot establish that a copy never loads."
+  },
+  SC4001: {
+    id: "SC4001",
+    title: "reaches the network",
+    severity: "info",
+    remediation:
+      "Confirm the endpoint is expected and that nothing sensitive is sent to it."
+  },
+  SC4002: {
+    id: "SC4002",
+    title: "reads credentials or secrets",
+    severity: "warning",
+    remediation:
+      "Confirm the skill needs the secret and does not forward it anywhere."
+  },
+  SC4003: {
+    id: "SC4003",
+    title: "downloads and executes remote code",
+    severity: "warning",
+    remediation:
+      "Pin and vendor the payload, or split fetch and execute so the content can be reviewed first."
+  },
+  SC4004: {
+    id: "SC4004",
+    title: "destructive shell command",
+    severity: "warning",
+    remediation:
+      "Scope the deletion to a path the skill created, and confirm before running it."
+  },
+  SC4005: {
+    id: "SC4005",
+    title: "unpinned dependency install",
+    severity: "info",
+    remediation:
+      "Pin the version so a later publish of the package cannot change what the skill runs."
+  },
+  SC4006: {
+    id: "SC4006",
+    title: "broad allowed-tools grant",
+    severity: "warning",
+    remediation:
+      "Narrow `allowed-tools:` to the specific commands the skill runs, e.g. `Bash(git:*)` rather than `Bash`."
+  }
+};
+
+export const SEVERITY_ORDER: Record<Severity, number> = {
+  error: 3,
+  warning: 2,
+  info: 1
+};
+
+export function ruleIds(): RuleId[] {
+  return Object.keys(RULES) as RuleId[];
+}

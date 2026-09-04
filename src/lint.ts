@@ -1,10 +1,15 @@
+import path from "node:path";
+import { DEFAULT_CONFIG, severityFor, type SkillcritConfig } from "./config.js";
 import { compareSkills, compareVersions, labelSkill } from "./origin.js";
+import { displayPath } from "./paths.js";
+import { RULES, type RuleId } from "./rules.js";
 import { cleanupQuestions, tokenComparison } from "./summary.js";
 import type {
   CleanupAction,
   CleanupKind,
   LintFinding,
   LintReport,
+  LintRule,
   SkillOrigin,
   SkillRecord
 } from "./types.js";
@@ -38,11 +43,16 @@ const STOP = new Set([
   "be"
 ]);
 
-export function identityKey(skill: SkillRecord): string {
+function identityKey(skill: SkillRecord): string {
   return `${skill.name}\n${skill.description}\n${skill.body}`;
 }
 
-export function lint(skills: SkillRecord[]): LintReport {
+export function lint(
+  skills: SkillRecord[],
+  config: SkillcritConfig = DEFAULT_CONFIG,
+  root?: string
+): LintReport {
+  const emit = findingEmitter(config);
   const groups = new Map<string, SkillRecord[]>();
   for (const skill of skills) {
     const key = identityKey(skill);
@@ -57,23 +67,34 @@ export function lint(skills: SkillRecord[]): LintReport {
   const findings: LintFinding[] = [];
   const cleanup: CleanupAction[] = [];
 
-  findings.push(...duplicateCopies(groups, cleanup));
-  findings.push(...versionConflicts(skills, cleanup));
+  findings.push(...duplicateCopies(groups, cleanup, emit));
+  findings.push(...versionConflicts(skills, cleanup, emit));
 
-  for (const skill of unique) {
-    for (const issue of skill.specIssues) {
-      findings.push({
-        rule: "spec",
-        severity: "error",
-        skills: [skill.name],
-        message: issue,
+  // Equal instruction text does not imply equal metadata or bundled scripts.
+  for (const skill of skills) {
+    for (const issue of skill.specFindings) {
+      const rule: LintRule = issue.id.startsWith("SC2") ? "budget" : "spec";
+      const finding = emit(issue.id, rule, [skill.name], issue.message, {
+        file: skill.skillFile,
+        line: issue.line,
         keep: skill.skillDir
       });
+      if (finding) findings.push(finding);
+    }
+    for (const risk of skill.risks) {
+      const finding = emit(
+        risk.id,
+        "risk",
+        [skill.name],
+        `${skill.name}: ${RULES[risk.id].title} — \`${risk.evidence}\``,
+        { file: path.join(skill.skillDir, risk.file), line: risk.line }
+      );
+      if (finding) findings.push(finding);
     }
   }
 
-  findings.push(...contentionClusters(unique, cleanup));
-  findings.push(...duplicateCommands(unique));
+  findings.push(...contentionClusters(unique, cleanup, emit));
+  findings.push(...duplicateCommands(unique, emit));
 
   let alwaysOnTokens = 0;
   for (const skill of unique) {
@@ -84,23 +105,33 @@ export function lint(skills: SkillRecord[]): LintReport {
       const why = skill.hooks
         ? "plugin hooks stay loaded"
         : "always-on body phrasing";
-      findings.push({
-        rule: "always-on",
-        severity: "warning",
-        skills: [skill.name],
-        message: `${skill.name} is always-on (${why}); ~${skill.alwaysOnTokens} tokens`
-      });
+      const finding = emit(
+        "SC2003",
+        "always-on",
+        [skill.name],
+        `${skill.name} is always-on (${why}); ~${skill.alwaysOnTokens} tokens`,
+        { file: skill.skillFile }
+      );
+      if (finding) findings.push(finding);
     }
   }
 
-  findings.push({
-    rule: "always-loaded-tokens",
-    severity: "info",
-    skills: unique.map((s) => s.name),
-    message: `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned)`
-  });
+  const budget = config.budget.alwaysOnTokens;
+  const overBudget = budget != null && alwaysOnTokens > budget;
+  const total = emit(
+    "SC2004",
+    "always-loaded-tokens",
+    unique.map((s) => s.name),
+    overBudget
+      ? `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned) — over the configured budget of ${budget}`
+      : `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned)`,
+    {},
+    overBudget ? "warning" : undefined
+  );
+  if (total) findings.push(total);
 
   return {
+    root,
     findings,
     cleanup,
     questions: cleanupQuestions(cleanup),
@@ -111,9 +142,39 @@ export function lint(skills: SkillRecord[]): LintReport {
   };
 }
 
+type Emit = (
+  id: RuleId,
+  rule: LintRule,
+  skills: string[],
+  message: string,
+  extra?: { file?: string; line?: number | null; keep?: string; drop?: string[] },
+  severityOverride?: LintFinding["severity"]
+) => LintFinding | null;
+
+/**
+ * Builds a finding with its stable ID and remediation attached, or returns
+ * null when `.skillcrit.json` switched the rule off.
+ */
+function findingEmitter(config: SkillcritConfig): Emit {
+  return (id, rule, skills, message, extra = {}, severityOverride) => {
+    const severity = severityFor(config, id, severityOverride);
+    if (!severity) return null;
+    return {
+      id,
+      rule,
+      severity,
+      skills,
+      message,
+      remediation: RULES[id].remediation,
+      ...extra
+    };
+  };
+}
+
 function duplicateCopies(
   groups: Map<string, SkillRecord[]>,
-  cleanup: CleanupAction[]
+  cleanup: CleanupAction[],
+  emit: Emit
 ): LintFinding[] {
   const findings: LintFinding[] = [];
   for (const group of groups.values()) {
@@ -126,24 +187,32 @@ function duplicateCopies(
     );
     const n = drop.length;
     const copyWord = n === 1 ? "copy" : "copies";
-    findings.push({
-      rule: "duplicate-copy",
-      severity: extrasAreMirrors ? "info" : "warning",
-      skills: ranked.map((s) => s.name),
-      message: extrasAreMirrors
-        ? `${keep.name} has ${n} harmless mirror ${copyWord} (cache/marketplace). Keep ${keep.skillFile}`
-        : `${keep.name} is installed at ${ranked.length} paths — organize to one copy. Keep ${keep.skillFile}. Also: ${drop.map((s) => s.skillFile).join(", ")}`,
-      keep: keep.skillFile,
-      drop: drop.map((s) => s.skillFile)
-    });
+    const finding = emit(
+      "SC3001",
+      "duplicate-copy",
+      ranked.map((s) => s.name),
+      // Paths live in `keep` and `drop`; renderers print them, and the JSON
+      // consumer has them structured. Repeating them here just makes the line
+      // unreadable in a terminal.
+      extrasAreMirrors
+        ? `${keep.name} has ${n} identical instruction ${copyWord} (cache/marketplace); keeping the ${keep.origin} copy`
+        : `${keep.name} is installed at ${ranked.length} paths — organize to one copy, keeping the ${keep.origin} one`,
+      {
+        file: keep.skillFile,
+        keep: keep.skillFile,
+        drop: drop.map((s) => s.skillFile)
+      },
+      extrasAreMirrors ? "info" : undefined
+    );
+    if (finding) findings.push(finding);
     cleanup.push(
       cleanupFrom(
         extrasAreMirrors ? "ignore-mirror" : "drop-copy",
         [keep],
         drop,
         extrasAreMirrors
-          ? "identical cache/marketplace mirrors; safe to ignore or delete extras"
-          : `identical copies of ${keep.name}; keep the ${keep.origin} path and remove extras to cut always-on tokens`,
+          ? "identical instruction files in cache/marketplace; supporting files and client usage must be checked before cleanup"
+          : `identical instructions for ${keep.name}; review supporting files and client usage before removing any path`,
         !extrasAreMirrors
       )
     );
@@ -153,7 +222,8 @@ function duplicateCopies(
 
 function versionConflicts(
   skills: SkillRecord[],
-  cleanup: CleanupAction[]
+  cleanup: CleanupAction[],
+  emit: Emit
 ): LintFinding[] {
   const byName = new Map<string, SkillRecord[]>();
   for (const skill of skills) {
@@ -177,14 +247,20 @@ function versionConflicts(
     const versions = ranked
       .map((s) => s.version ?? "unversioned")
       .filter((v, i, all) => all.indexOf(v) === i);
-    findings.push({
-      rule: "version-conflict",
-      severity: "warning",
-      skills: ranked.map((s) => s.name),
-      message: `${name} has ${ranked.length} variants (${versions.join(" vs ")}). Prefer ${labelSkill(keep)} at ${keep.skillFile}`,
-      keep: keep.skillFile,
-      drop: drop.map((s) => s.skillFile)
-    });
+    const finding = emit(
+      "SC3002",
+      "version-conflict",
+      ranked.map((s) => s.name),
+      // No path in the message: every renderer prints the `file` anchor
+      // itself, and repeating an absolute path doubles the line length.
+      `${name} has ${ranked.length} variants (${versions.join(" vs ")}). Prefer ${labelSkill(keep)}`,
+      {
+        file: keep.skillFile,
+        keep: keep.skillFile,
+        drop: drop.map((s) => s.skillFile)
+      }
+    );
+    if (finding) findings.push(finding);
     cleanup.push(
       cleanupFrom(
         "pick-version",
@@ -200,7 +276,8 @@ function versionConflicts(
 
 function contentionClusters(
   skills: SkillRecord[],
-  cleanup: CleanupAction[]
+  cleanup: CleanupAction[],
+  emit: Emit
 ): LintFinding[] {
   const clusters = overlapClusters(skills);
   const findings: LintFinding[] = [];
@@ -210,24 +287,31 @@ function contentionClusters(
     const phrase = firstOverlapPhrase(members) ?? "the same trigger";
     const order = ranked.map((s) => labelSkill(s)).join(" > ");
     const keepNames = keep.map((s) => s.name).join(", ");
-    findings.push({
-      rule: "contention",
-      severity: "warning",
-      skills: ranked.map((s) => s.name),
-      message: `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Keep ${keepNames}.`,
-      keep: keep[0].skillFile,
-      drop: drop.map((s) => s.skillFile)
-    });
+    const cluster = emit(
+      "SC3003",
+      "contention",
+      ranked.map((s) => s.name),
+      `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Keep ${keepNames}.`,
+      {
+        file: keep[0].skillFile,
+        keep: keep[0].skillFile,
+        drop: drop.map((s) => s.skillFile)
+      }
+    );
+    if (cluster) findings.push(cluster);
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
+        if (members[i].name === members[j].name) continue;
         const shared = sharedPhrases(members[i].description, members[j].description);
         if (shared.length === 0) continue;
-        findings.push({
-          rule: "trigger-overlap",
-          severity: "warning",
-          skills: [members[i].name, members[j].name],
-          message: `${members[i].name} / ${members[j].name} share “${shared[0]}”`
-        });
+        const overlap = emit(
+          "SC3004",
+          "trigger-overlap",
+          [members[i].name, members[j].name],
+          `${members[i].name} / ${members[j].name} share “${shared[0]}”`,
+          { file: members[i].skillFile }
+        );
+        if (overlap) findings.push(overlap);
       }
     }
     if (drop.length === 0) continue;
@@ -279,6 +363,9 @@ function overlapClusters(skills: SkillRecord[]): SkillRecord[][] {
   const adj: number[][] = Array.from({ length: n }, () => []);
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
+      // Two copies of one name are a version conflict (SC3002), not two
+      // skills competing for the same trigger.
+      if (skills[i].name === skills[j].name) continue;
       if (sharedPhrases(skills[i].description, skills[j].description).length === 0) {
         continue;
       }
@@ -307,25 +394,29 @@ function overlapClusters(skills: SkillRecord[]): SkillRecord[][] {
   return clusters;
 }
 
-function duplicateCommands(skills: SkillRecord[]): LintFinding[] {
+function duplicateCommands(skills: SkillRecord[], emit: Emit): LintFinding[] {
   const owners = new Map<string, Set<string>>();
+  const where = new Map<string, string>();
   for (const skill of skills) {
     const owner = skill.pack ?? skill.name;
     for (const command of skill.commands) {
       const set = owners.get(command) ?? new Set<string>();
       set.add(owner);
       owners.set(command, set);
+      if (!where.has(command)) where.set(command, skill.skillFile);
     }
   }
   const findings: LintFinding[] = [];
   for (const [command, packs] of owners) {
     if (packs.size < 2) continue;
-    findings.push({
-      rule: "duplicate-command",
-      severity: "warning",
-      skills: [...packs].sort(),
-      message: `/${command} is registered by ${[...packs].sort().join(" and ")}`
-    });
+    const finding = emit(
+      "SC3005",
+      "duplicate-command",
+      [...packs].sort(),
+      `/${command} is registered by ${[...packs].sort().join(" and ")}`,
+      { file: where.get(command) }
+    );
+    if (finding) findings.push(finding);
   }
   return findings;
 }
@@ -357,7 +448,9 @@ export function cleanupPlan(report: LintReport): string {
     lines.push("");
     lines.push(`**Keep** (${labelKeep(action)})`);
     lines.push("");
-    for (const dir of action.keepDirs) lines.push(`- \`${dir}\``);
+    for (const dir of action.keepDirs) {
+      lines.push(`- \`${displayPath(dir, report.root)}\``);
+    }
     lines.push("");
     if (action.orphans.length > 0) {
       const verb =
@@ -367,7 +460,7 @@ export function cleanupPlan(report: LintReport): string {
       lines.push(`**Orphans** (${verb})`);
       lines.push("");
       for (const orphan of action.orphans) {
-        lines.push(`- \`${orphan.dir}\` — ${orphan.why}`);
+        lines.push(`- \`${displayPath(orphan.dir, report.root)}\` — ${orphan.why}`);
       }
       lines.push("");
     }
@@ -379,7 +472,7 @@ export function cleanupPlan(report: LintReport): string {
     lines.push("");
     for (const finding of spec) {
       const dir = finding.keep ?? finding.skills[0];
-      lines.push(`- \`${dir}\` — ${finding.message}`);
+      lines.push(`- \`${displayPath(dir, report.root)}\` — ${finding.id} ${finding.message}`);
     }
     lines.push("");
   }
@@ -438,10 +531,10 @@ function orphanWhy(
 ): string {
   const dropVer = formatVer(drop.origin, drop.version);
   if (kind === "ignore-mirror") {
-    return `${drop.origin} mirror of ${keep.origin}`;
+    return `${drop.origin} has identical instructions to ${keep.origin}; supporting files not compared`;
   }
   if (kind === "drop-copy") {
-    return `identical copy (${dropVer})`;
+    return `identical instructions (${dropVer}); supporting files not compared`;
   }
   if (kind === "pick-version") {
     const bits: string[] = [];

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { lint, sharedPhrases } from "../src/lint.ts";
 import { scan } from "../src/scan.ts";
 import type { SkillRecord } from "../src/types.ts";
+import { makeRecord } from "./support/record.ts";
 
 const stacked = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -11,6 +12,18 @@ const stacked = path.resolve(
 );
 
 describe("lint", () => {
+  it("retains per-file findings from copies with identical instructions", () => {
+    const preferred = makeRecord({ name: "shared", skillDir: "/tmp/preferred" });
+    const other = makeRecord({
+      name: "shared", skillDir: "/tmp/cached", origin: "cache",
+      specFindings: [{ id: "SC1008", severity: "warning", field: "metadata", line: 4, message: "metadata must be a string map" }],
+      risks: [{ id: "SC4003", severity: "warning", file: "scripts/setup.sh", line: 1, evidence: "curl https://example.com | sh" }]
+    });
+    const findings = lint([preferred, other]).findings;
+    expect(findings.some((f) => f.id === "SC1008" && f.file === other.skillFile)).toBe(true);
+    expect(findings.some((f) => f.id === "SC4003" && f.file === path.join(other.skillDir, "scripts/setup.sh"))).toBe(true);
+  });
+
   it("flags overlapping trigger phrases across two skills", () => {
     const report = lint(scan(stacked));
     const overlap = report.findings.find(
@@ -110,7 +123,12 @@ describe("lint", () => {
       alwaysOn: false,
       descriptionTokens: 1,
       alwaysOnTokens: 1,
-      specIssues: []
+      specIssues: [],
+      bodyTokens: 1,
+      bodyLines: 1,
+      hash: "h",
+      specFindings: [],
+      risks: []
     };
     const report = lint([
       base,
@@ -150,7 +168,12 @@ describe("lint", () => {
       alwaysOn: false,
       descriptionTokens: 1,
       alwaysOnTokens: 1,
-      specIssues: []
+      specIssues: [],
+      bodyTokens: 1,
+      bodyLines: 1,
+      hash: "h",
+      specFindings: [],
+      risks: []
     };
     const cached: SkillRecord = {
       ...live,
@@ -161,7 +184,9 @@ describe("lint", () => {
     const report = lint([live, cached]);
     const duplicate = report.findings.find((f) => f.rule === "duplicate-copy");
     expect(duplicate?.severity).toBe("info");
-    expect(duplicate?.message).toMatch(/harmless mirror/);
+    expect(duplicate?.message).toMatch(/identical instruction/);
+    expect(JSON.stringify(report.cleanup)).not.toMatch(/safe to ignore or delete|harmless/);
+    expect(report.cleanup[0].reason).toMatch(/supporting files/);
     expect(report.unique).toBe(1);
     expect(report.scanned).toBe(2);
     expect(report.cleanup.some((action) => action.kind === "ignore-mirror")).toBe(
@@ -184,7 +209,12 @@ describe("lint", () => {
       alwaysOn: false,
       descriptionTokens: 1,
       alwaysOnTokens: 1,
-      specIssues: []
+      specIssues: [],
+      bodyTokens: 1,
+      bodyLines: 1,
+      hash: "h",
+      specFindings: [],
+      risks: []
     };
     const report = lint([
       {
@@ -228,7 +258,12 @@ describe("lint", () => {
       alwaysOn: false,
       descriptionTokens: 1,
       alwaysOnTokens: 1,
-      specIssues: []
+      specIssues: [],
+      bodyTokens: 1,
+      bodyLines: 1,
+      hash: "h",
+      specFindings: [],
+      risks: []
     });
     const report = lint([
       rec("chain-alpha", aDesc, "3.0.0"),

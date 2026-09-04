@@ -1,3 +1,4 @@
+import { displayPath } from "./paths.js";
 import type {
   CleanupAction,
   CleanupQuestion,
@@ -75,8 +76,10 @@ export function formatSummary(report: LintReport): string {
   for (const q of report.questions) {
     const tag = q.harmful ? "review" : "optional";
     lines.push(`${q.id}. [${q.kind} / ${tag}] ${q.prompt}`);
-    lines.push(`   keep: ${q.keep}`);
-    for (const drop of q.drop) lines.push(`   drop: ${drop}`);
+    lines.push(`   keep: ${displayPath(q.keep, report.root)}`);
+    for (const drop of q.drop) {
+      lines.push(`   drop: ${displayPath(drop, report.root)}`);
+    }
   }
   lines.push("");
   return lines.join("\n");
@@ -89,9 +92,9 @@ function promptFor(action: CleanupAction): string {
     case "pick-version":
       return `Keep this version and remove the other variants?`;
     case "drop-copy":
-      return `Remove extra identical copies and keep one path?`;
+      return `Review supporting files and client usage before removing identical instruction copies?`;
     case "ignore-mirror":
-      return `Leave cache/marketplace mirrors in place?`;
+      return `Leave cache/marketplace instruction copies in place pending package and client review?`;
   }
 }
 

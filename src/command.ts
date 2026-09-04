@@ -1,48 +1,107 @@
 import fs from "node:fs";
 import path from "node:path";
-import { stubAdapter } from "./adapters/stub.js";
-import { evalPack } from "./eval.js";
+import { formatAdapters, resolveAdapter } from "./adapters/index.js";
+import { loadConfig, type SkillcritConfig } from "./config.js";
+import { doctor, formatDoctor } from "./doctor.js";
+import { evalPack, formatEval } from "./eval.js";
 import { cleanupPlan, lint } from "./lint.js";
 import { createProgress } from "./progress.js";
+import {
+  formatGithub,
+  formatMarkdown,
+  formatSarif,
+  formatText,
+  isFormat,
+  type Format
+} from "./report.js";
 import { formatRoots, listSkillLocations } from "./roots.js";
+import { RULES, SEVERITY_ORDER, ruleIds } from "./rules.js";
 import { scan } from "./scan.js";
 import { formatSummary } from "./summary.js";
-import type { Adapter } from "./types.js";
+import type { LintReport, Severity } from "./types.js";
 import { packageVersion } from "./version.js";
 
+/**
+ * Exit codes are part of the contract; CI scripts branch on them.
+ *
+ *   0  clean, or findings below the configured gate
+ *   1  findings at or above the gate (default: warning)
+ *   2  usage error — bad flag, missing argument, unknown command
+ *   3  the run itself failed (unreadable config, adapter error)
+ */
+export const EXIT = { ok: 0, findings: 1, usage: 2, error: 3 } as const;
+
 export async function main(argv: string[]): Promise<number> {
-  const parsed = parseArgs(argv);
+  let parsed: ReturnType<typeof parseArgs>;
+  try {
+    parsed = parseArgs(argv);
+  } catch (err) {
+    process.stderr.write(`${(err as Error).message}\n\n${usage()}`);
+    return EXIT.usage;
+  }
   const { command, target, json, user, tasks, agent, help, version } = parsed;
-  const progress = createProgress(!json && Boolean(process.stderr.isTTY));
 
   if (version || command === "version") {
     process.stdout.write(`skillcrit ${packageVersion()}\n`);
-    return 0;
+    return EXIT.ok;
+  }
+
+  if (command === "rules") {
+    process.stdout.write(json ? rulesJson() : rulesTable());
+    return EXIT.ok;
   }
 
   if (help || !command || command === "help" || command === "--help") {
-    process.stdout.write(usage());
-    return help || command ? 0 : 2;
+    const topic = help ? command : positionalHelpTopic(command, target);
+    process.stdout.write(commandHelp(topic) ?? usage());
+    return help || command ? EXIT.ok : EXIT.usage;
   }
 
+  const root = target ?? process.cwd();
+  const format: Format = json ? "json" : parsed.format;
+  const progress = createProgress(
+    format === "text" && Boolean(process.stderr.isTTY)
+  );
+
   if (command === "roots") {
-    const locations = listSkillLocations(target ?? process.cwd(), { user: true });
-    if (json) {
+    const locations = listSkillLocations(root, { user: true });
+    if (format === "json") {
       process.stdout.write(JSON.stringify({ locations }, null, 2) + "\n");
     } else {
       process.stdout.write(formatRoots(locations));
     }
-    return 0;
+    return EXIT.ok;
   }
 
-  if (command === "scan") {
+  let config: SkillcritConfig;
+  try {
+    const loaded = loadConfig(root, parsed.config);
+    config = loaded.config;
+    for (const warning of loaded.warnings) {
+      process.stderr.write(`skillcrit: ${warning}\n`);
+    }
+    if (loaded.warnings.length > 0 && parsed.config) return EXIT.error;
+  } catch (err) {
+    process.stderr.write(`skillcrit: ${String(err)}\n`);
+    return EXIT.error;
+  }
+  if (parsed.failOn) config = { ...config, failOn: parsed.failOn };
+
+  const runScan = (risks: boolean) => {
     progress.phase("scan");
-    const skills = scan(target ?? process.cwd(), {
+    return scan(root, {
       user,
-      onProgress: (n) => progress.tick("scan", n)
+      config,
+      risks,
+      onProgress: (n) => progress.tick("scan", n),
+      onTruncated: (reason) => process.stderr.write(`skillcrit: ${reason}\n`)
     });
+  };
+
+  if (command === "scan") {
+    const skills = runScan(false);
     progress.done(`scanned ${skills.length} skills`);
-    if (json) {
+    if (format === "json") {
       process.stdout.write(JSON.stringify({ skills }, null, 2) + "\n");
     } else {
       for (const skill of skills) {
@@ -54,80 +113,129 @@ export async function main(argv: string[]): Promise<number> {
       }
       process.stdout.write(`${skills.length} skills\n`);
     }
-    return 0;
+    return EXIT.ok;
+  }
+
+  if (command === "doctor" || command === "inspect") {
+    const skills = runScan(true);
+    progress.phase("resolve");
+    const report = doctor(skills, root, { user });
+    progress.done(
+      `${report.recommendations.length} recommendations / ${report.alternatives} alternatives; runtime unknown`
+    );
+    if (format === "json") {
+      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+    } else {
+      process.stdout.write(formatDoctor(report));
+    }
+    return EXIT.ok;
   }
 
   if (command === "lint") {
-    progress.phase("scan");
-    const skills = scan(target ?? process.cwd(), {
-      user,
-      onProgress: (n) => progress.tick("scan", n)
-    });
+    const skills = runScan(true);
     progress.phase("lint");
-    const report = lint(skills);
+    const report = lint(skills, config, root);
     progress.done(
       `${report.unique} unique / ${report.scanned} scanned  ~${report.tokens.alwaysOnNow} tok`
     );
-    if (parsed.fix && !json) {
+    if (parsed.fix && format === "text") {
       const md = cleanupPlan(report);
       process.stdout.write(md);
       process.stdout.write(formatSummary(report));
-      writeCleanupDoc(parsed.out, md);
-      const blocking = report.findings.filter((f) => f.severity !== "info");
-      return blocking.length > 0 ? 1 : 0;
-    }
-    if (json) {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
-    } else {
-      for (const finding of report.findings) {
-        process.stdout.write(
-          `${finding.severity} ${finding.rule}: ${finding.message}\n`
-        );
+      try {
+        writeCleanupDoc(parsed.out, md);
+      } catch (err) {
+        process.stderr.write(`skillcrit: ${(err as Error).message}\n`);
+        return EXIT.error;
       }
-      process.stdout.write(formatSummary(report));
+      return gate(report, config.failOn);
     }
-    const blocking = report.findings.filter((f) => f.severity !== "info");
-    return blocking.length > 0 ? 1 : 0;
+    process.stdout.write(renderLint(report, format));
+    return gate(report, config.failOn);
   }
 
   if (command === "eval") {
+    if (agent === "list") {
+      process.stdout.write(formatAdapters());
+      return EXIT.ok;
+    }
     if (!target) {
       process.stderr.write("skillcrit eval <pack-dir>\n");
-      return 2;
+      return EXIT.usage;
     }
-    const adapter = resolveAdapter(agent);
-    progress.phase("eval");
-    const summary = await evalPack({
-      tasksDir: tasks,
-      packDir: target,
-      adapter,
-      onProgress: (n, total, task) => progress.tick(task, n, total)
-    });
+    let summary;
+    try {
+      const adapter = resolveAdapter(agent);
+      progress.phase("eval");
+      summary = await evalPack({
+        tasksDir: tasks,
+        packDir: target,
+        adapter,
+        repeat: parsed.repeat,
+        onProgress: (n, total, task) => progress.tick(task, n, total)
+      });
+    } catch (err) {
+      process.stderr.write(`skillcrit: ${(err as Error).message}\n`);
+      return EXIT.error;
+    }
     progress.done(
       `eval ${summary.results.length} tasks  overbuild Δ ${summary.overbuildDelta}`
     );
-    if (json) {
+    if (format === "json") {
       process.stdout.write(JSON.stringify(summary, null, 2) + "\n");
     } else {
-      for (const row of summary.results) {
-        process.stdout.write(
-          `${row.task}  off overbuild=${row.off.overbuild}  on overbuild=${row.on.overbuild}\n`
-        );
-      }
+      process.stdout.write(formatEval(summary));
     }
-    return 0;
+    return EXIT.ok;
   }
 
   process.stderr.write(`unknown command: ${command}\n${usage()}`);
-  return 2;
+  return EXIT.usage;
 }
 
-function resolveAdapter(agent: string): Adapter {
-  if (agent === "stub" || agent === "") return stubAdapter;
-  throw new Error(
-    `agent "${agent}" is not wired in v0.4; use --agent stub (claude/codex adapters come later)`
-  );
+function renderLint(report: LintReport, format: Format): string {
+  switch (format) {
+    case "json":
+      return JSON.stringify(report, null, 2) + "\n";
+    case "sarif":
+      return formatSarif(report);
+    case "github":
+      return formatGithub(report);
+    case "markdown":
+      return formatMarkdown(report);
+    default:
+      return formatText(report);
+  }
 }
+
+/** Exit 1 only for findings at or above the configured severity gate. */
+function gate(report: LintReport, failOn: Severity): number {
+  const threshold = SEVERITY_ORDER[failOn];
+  const blocking = report.findings.filter(
+    (f) => SEVERITY_ORDER[f.severity] >= threshold
+  );
+  return blocking.length > 0 ? EXIT.findings : EXIT.ok;
+}
+
+const FLAGS = new Set([
+  "--json",
+  "--user",
+  "--help",
+  "-h",
+  "--version",
+  "-V",
+  "--fix"
+]);
+const OPTIONS = new Set([
+  "--tasks",
+  "--agent",
+  "--out",
+  "--format",
+  "--fail-on",
+  "--config",
+  "--repeat"
+]);
+const SEVERITIES = new Set(["error", "warning", "info"]);
 
 function parseArgs(argv: string[]) {
   const rest = argv.slice(2);
@@ -136,23 +244,39 @@ function parseArgs(argv: string[]) {
   const positional: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
-    if (
-      arg === "--json" ||
-      arg === "--user" ||
-      arg === "--help" ||
-      arg === "--version" ||
-      arg === "-V" ||
-      arg === "--fix"
-    ) {
-      flags.add(arg === "-V" ? "--version" : arg);
-    } else if (arg === "--tasks" || arg === "--agent" || arg === "--out") {
-      kv.set(arg, rest[++i] ?? "");
+    const eq = arg.indexOf("=");
+    const name = arg.startsWith("--") && eq > 0 ? arg.slice(0, eq) : arg;
+    if (FLAGS.has(name)) {
+      if (eq > 0) throw new Error(`${name} does not take a value`);
+      flags.add(name === "-V" ? "--version" : name === "-h" ? "--help" : name);
+    } else if (OPTIONS.has(name)) {
+      const value = eq > 0 ? arg.slice(eq + 1) : rest[++i];
+      if (value === undefined || value === "" ||
+          (eq < 0 && value.startsWith("-") && !(name === "--out" && value === "-"))) {
+        throw new Error(`${name} requires a value`);
+      }
+      kv.set(name, value);
     } else if (arg.startsWith("-")) {
       throw new Error(`unknown flag ${arg}`);
     } else {
       positional.push(arg);
     }
   }
+
+  const format = kv.get("--format") ?? "text";
+  if (!isFormat(format)) {
+    throw new Error(`unknown --format ${format} (text, json, markdown, sarif, github)`);
+  }
+  const failOn = kv.get("--fail-on");
+  if (failOn !== undefined && !SEVERITIES.has(failOn)) {
+    throw new Error(`unknown --fail-on ${failOn} (error, warning, info)`);
+  }
+  const repeatRaw = kv.get("--repeat");
+  const repeat = repeatRaw === undefined ? 1 : Number(repeatRaw);
+  if (!Number.isInteger(repeat) || repeat < 1) {
+    throw new Error(`--repeat must be a positive integer, got ${repeatRaw}`);
+  }
+
   return {
     command: positional[0],
     target: positional[1],
@@ -161,29 +285,141 @@ function parseArgs(argv: string[]) {
     help: flags.has("--help"),
     version: flags.has("--version"),
     fix: flags.has("--fix"),
-    out: kv.get("--out") ?? (flags.has("--fix") && !flags.has("--json") ? "skillcrit-cleanup.md" : "-"),
+    format: format as Format,
+    failOn: failOn as Severity | undefined,
+    config: kv.get("--config"),
+    repeat,
+    out:
+      kv.get("--out") ??
+      (flags.has("--fix") && !flags.has("--json") ? "skillcrit-cleanup.md" : "-"),
     tasks: kv.get("--tasks"),
     agent: kv.get("--agent") ?? "stub"
   };
 }
 
+const COMMANDS = new Set(["roots", "scan", "doctor", "inspect", "lint", "eval", "rules"]);
+
+function positionalHelpTopic(
+  command: string | undefined,
+  target: string | undefined
+): string | undefined {
+  if (command !== "help") return undefined;
+  return target && COMMANDS.has(target) ? target : undefined;
+}
+
 function usage(): string {
-  return `skillcrit ${packageVersion()} — a linter for your skills
+  return `skillcrit ${packageVersion()} — audit installed agent skills, conflicts, and context costs
 
-  skillcrit --version
-  skillcrit roots [path] [--json]
-  skillcrit scan [path] [--user] [--json]
-  skillcrit lint [path] [--user] [--json] [--fix] [--out <file>]
-  skillcrit eval <pack-dir> [--tasks <dir>] [--agent stub] [--json]
+  skillcrit doctor [path] [--user]   cleanup recommendations, estimated cost, risk inventory
+  skillcrit lint   [path] [--user]   conflicts, duplicates, spec, budget, risk
+  skillcrit scan   [path] [--user]   raw inventory of every SKILL.md found
+  skillcrit roots  [path]            skill/plugin locations per harness
+  skillcrit eval   <pack> [--agent]  pack on vs off (experimental)
+  skillcrit rules                    the rule catalogue and default severities
 
-  Default path is the current project. --user also scans installed
-  user-level skills (Claude, Cursor, Codex, Qwen, Gemini, Hermes, Pi,
-  OpenCode, Copilot, Continue, Goose, DeepSeek). cache/ and
-  marketplaces/ copies are tagged, not treated as extra unique skills.
-  --fix prints a dry-run markdown inventory (keep vs orphans) and writes
-  skillcrit-cleanup.md. --out <file> chooses the path; --out - skips the
-  write. Progress writes to stderr when the terminal is a TTY.
+Common flags
+  --user                also read the documented $HOME skill roots
+  --format <f>          text (default), json, markdown, sarif, github
+  --json                shorthand for --format json
+  --fail-on <severity>  error | warning (default) | info
+  --config <file>       use this .skillcrit.json instead of searching upward
+  --help                this text; \`skillcrit help <command>\` for one command
+
+Exit codes
+  0  clean, or only findings below the gate
+  1  findings at or above --fail-on
+  2  usage error
+  3  run failed (bad config, adapter error, refused write)
+
+60-second audit
+  npm i -g skillcrit
+  skillcrit doctor . --user
 `;
+}
+
+const HELP: Record<string, string> = {
+  doctor: `skillcrit doctor [path] [--user] [--format text|json]
+
+Recommend a copy per skill name for cleanup review. Runtime selection is unknown:
+client namespaces and enablement are not resolved. Token counts estimate the
+recommended set; risk inventory covers all scanned copies.
+
+  skillcrit doctor . --user
+  skillcrit doctor . --user --json > estate.json
+
+\`inspect\` is an alias. Always exits 0 — it reports, it does not judge.`,
+
+  lint: `skillcrit lint [path] [--user] [--fix] [--out <file>]
+                    [--format text|json|markdown|sarif|github]
+                    [--fail-on error|warning|info] [--config <file>]
+
+Findings carry a stable rule ID (see \`skillcrit rules\`), the file and line they
+came from, and a remediation line.
+
+  skillcrit lint .                          project skills only
+  skillcrit lint . --user                   plus the $HOME roots
+  skillcrit lint . --format sarif > out.sarif
+  skillcrit lint . --format github          GitHub Actions annotations
+  skillcrit lint . --fail-on error          only errors break the build
+  skillcrit lint . --fix --out cleanup.md   dry-run keep/orphan plan
+
+--fix never deletes or edits a skill. It writes one markdown plan and refuses
+to overwrite SKILL.md, package.json, LICENSE or .env.
+
+Exit 1 means findings at or above the gate, not a crash.`,
+
+  scan: `skillcrit scan [path] [--user] [--json]
+
+Every SKILL.md found, before any resolution: name, version, pack, origin and
+description tokens. Use \`doctor\` when the question is which copy to review for cleanup.`,
+
+  roots: `skillcrit roots [path] [--json]
+
+Every documented project, user and admin skill/plugin directory per harness,
+and whether it exists. Always includes user scope so the output is a complete
+map of where a skill could be installed.`,
+
+  eval: `skillcrit eval <pack-dir> [--tasks <dir>] [--agent <name>] [--repeat <n>]
+
+Experimental. Runs each bundled task twice — pack off, pack on — and reports
+whether the task's own tests passed and how much extra source was written.
+
+  skillcrit eval --agent list       adapters, and which are synthetic
+  skillcrit eval ./my-pack --repeat 3
+
+Only the synthetic \`stub\` adapter ships today: it replays recorded fixtures
+and never calls a model, so it proves the harness works and nothing else. Every
+report restates its own limitations.`,
+
+  rules: `skillcrit rules [--json]
+
+The rule catalogue: stable IDs, default severities and remediation. IDs are the
+contract — use them in \`.skillcrit.json\` to re-grade or switch off a rule:
+
+  { "rules": { "SC1012": "off", "SC3001": "error" }, "failOn": "error" }`
+};
+
+function commandHelp(topic: string | undefined): string | null {
+  if (!topic) return null;
+  const key = topic === "inspect" ? "doctor" : topic;
+  return HELP[key] ? `${HELP[key]}\n` : null;
+}
+
+function rulesTable(): string {
+  const lines = ["# skillcrit rules", ""];
+  for (const id of ruleIds()) {
+    const rule = RULES[id];
+    lines.push(`${id}  ${rule.severity.padEnd(7)}  ${rule.title}`);
+    lines.push(`         ${rule.remediation}`);
+  }
+  lines.push("");
+  lines.push("Override any of these in .skillcrit.json under \"rules\".");
+  lines.push("");
+  return lines.join("\n");
+}
+
+function rulesJson(): string {
+  return JSON.stringify({ rules: ruleIds().map((id) => RULES[id]) }, null, 2) + "\n";
 }
 
 const BLOCKED_OUT = new Set(["skill.md", "package.json", ".env", "license"]);

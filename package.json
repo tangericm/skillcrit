@@ -1,7 +1,7 @@
 {
   "name": "skillcrit",
-  "version": "0.4.0",
-  "description": "A linter for your skills.",
+  "version": "0.5.0",
+  "description": "Audit installed agent skills, conflicts, and context costs.",
   "type": "module",
   "bin": {
     "skillcrit": "./dist/cli.js"
@@ -15,6 +15,7 @@
   "files": [
     "dist",
     "skills",
+    "docs",
     "fixtures/tasks"
   ],
   "scripts": {
@@ -42,7 +43,10 @@
     "agent-skills",
     "lint",
     "eval",
-    "agentskills"
+    "agentskills",
+    "audit",
+    "context",
+    "sarif"
   ],
   "dependencies": {
     "gray-matter": "^4.0.3"

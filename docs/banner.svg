@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="640" height="176" viewBox="0 0 640 176" role="img" aria-label="skillcrit — a linter for your skills">
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="176" viewBox="0 0 640 176" role="img" aria-label="skillcrit â€” a linter for your skills">
   <title>skillcrit</title>
   <rect width="640" height="176" rx="24" fill="#0c0c10"/>
   <g transform="translate(36,24)">
@@ -16,5 +16,5 @@
   <text x="188" y="92" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="700">
     <tspan fill="#f7f4ea">skill</tspan><tspan fill="#c8ff3d">crit</tspan>
   </text>
-  <text x="188" y="128" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="4" fill="#8a867c">LINT · EVAL</text>
+  <text x="188" y="128" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="4" fill="#8a867c">LINT Â· EVAL</text>
 </svg>

@@ -1,6 +1,6 @@
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import { homeDir } from "./home.js";
 
 export type Harness =
   | "agents"
@@ -95,7 +95,7 @@ export function listSkillLocations(
   root: string,
   options: { user?: boolean } = {}
 ): SkillLocation[] {
-  const home = os.homedir();
+  const home = homeDir();
   const specs = LOCATION_SPECS.filter(
     (spec) => spec.scope === "project" || options.user
   );
@@ -110,7 +110,7 @@ export function listSkillLocations(
 }
 
 export function collectRoots(root: string, extraRoots: string[] = [], user = false): string[] {
-  const home = os.homedir();
+  const home = homeDir();
   const roots = [root, ...extraRoots];
   for (const spec of LOCATION_SPECS) {
     if (spec.scope === "project") {
