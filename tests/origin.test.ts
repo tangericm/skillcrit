@@ -42,6 +42,15 @@ describe("detectOrigin", () => {
     expect(detectOrigin(path.join(home, ".agents", "skills", "x", "SKILL.md"))).toBe(
       "user"
     );
+    expect(detectOrigin(path.join(home, ".qwen", "skills", "x", "SKILL.md"))).toBe(
+      "user"
+    );
+    expect(detectOrigin(path.join(home, ".hermes", "skills", "x", "SKILL.md"))).toBe(
+      "user"
+    );
+    expect(
+      detectOrigin(path.join(home, ".pi", "agent", "skills", "x", "SKILL.md"))
+    ).toBe("user");
   });
 
   it("tags project .agents/.claude trees as project, even under $HOME", () => {

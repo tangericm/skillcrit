@@ -1,12 +1,6 @@
 import os from "node:os";
+import { USER_HOME_PREFIXES } from "./roots.js";
 import type { SkillOrigin, SkillRecord } from "./types.js";
-
-const USER_HOME_ROOTS = [
-  "/.agents/",
-  "/.claude/",
-  "/.cursor/",
-  "/.codex/"
-];
 
 export function detectOrigin(skillFile: string): SkillOrigin {
   const n = skillFile.replace(/\\/g, "/").toLowerCase();
@@ -20,7 +14,7 @@ export function detectOrigin(skillFile: string): SkillOrigin {
   const prefix = home.endsWith("/") ? home : `${home}/`;
   if (n.startsWith(prefix)) {
     const rest = n.slice(home.length);
-    if (USER_HOME_ROOTS.some((root) => rest.startsWith(root))) {
+    if (USER_HOME_PREFIXES.some((root) => rest.startsWith(root))) {
       return "user";
     }
   }

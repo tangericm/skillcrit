@@ -141,4 +141,28 @@ description: cached caveman skill for converting tables to RFC 4180 CSV only.
     expect(records.find((s) => s.name === "keep")?.origin).toBe("project");
     fs.rmSync(tmp, { recursive: true, force: true });
   });
+
+  it("finds project skills under Qwen, Gemini, Pi, and DeepSeek dirs", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-harness-"));
+    const body = (name: string) => `---
+name: ${name}
+description: Unique ${name} skill for converting tables to RFC 4180 CSV only.
+---
+`;
+    for (const rel of [
+      ".qwen/skills/qwen-one",
+      ".gemini/skills/gemini-one",
+      ".pi/skills/pi-one",
+      ".deepseek/skills/deepseek-one"
+    ]) {
+      const dir = path.join(tmp, rel);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "SKILL.md"), body(path.basename(rel)));
+    }
+    const names = scan(tmp).map((s) => s.name).sort();
+    expect(names).toEqual(
+      ["deepseek-one", "gemini-one", "pi-one", "qwen-one"].sort()
+    );
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
 });

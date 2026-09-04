@@ -50,9 +50,29 @@ export type LintFinding = {
   drop?: string[];
 };
 
+export type CleanupQuestion = {
+  id: number;
+  kind: CleanupKind;
+  prompt: string;
+  keep: string;
+  drop: string[];
+  harmful: boolean;
+};
+
+export type TokenComparison = {
+  scanned: number;
+  unique: number;
+  alwaysOnNow: number;
+  afterCleanup: number;
+  saved: number;
+  descriptionOnly: number;
+};
+
 export type LintReport = {
   findings: LintFinding[];
   cleanup: CleanupAction[];
+  questions: CleanupQuestion[];
+  tokens: TokenComparison;
   alwaysOnTokens: number;
   scanned: number;
   unique: number;

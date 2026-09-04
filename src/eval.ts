@@ -9,6 +9,7 @@ export type EvalOptions = {
   tasksDir?: string;
   packDir: string | null;
   adapter: Adapter;
+  onProgress?: (n: number, total: number, task: string) => void;
 };
 
 const bundledTasks = path.join(
@@ -29,7 +30,10 @@ export async function evalPack(options: EvalOptions): Promise<EvalSummary> {
     .sort();
 
   const results: TaskResult[] = [];
+  let i = 0;
   for (const task of tasks) {
+    i += 1;
+    options.onProgress?.(i, tasks.length, task);
     const taskDir = path.join(tasksDir, task);
     const off = await runTask(taskDir, null, options.adapter);
     const on = await runTask(taskDir, options.packDir, options.adapter);

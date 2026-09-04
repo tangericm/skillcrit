@@ -11,4 +11,7 @@ export {
   compareVersions,
   labelSkill
 } from "./origin.js";
+export { listSkillLocations, formatRoots, collectRoots } from "./roots.js";
+export { createProgress } from "./progress.js";
+export { formatSummary, cleanupQuestions, tokenComparison } from "./summary.js";
 export type * from "./types.js";

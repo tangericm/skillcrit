@@ -1,4 +1,5 @@
 import { compareSkills, labelSkill } from "./origin.js";
+import { cleanupQuestions, tokenComparison } from "./summary.js";
 import type {
   CleanupAction,
   LintFinding,
@@ -99,6 +100,8 @@ export function lint(skills: SkillRecord[]): LintReport {
   return {
     findings,
     cleanup,
+    questions: cleanupQuestions(cleanup),
+    tokens: tokenComparison(unique, cleanup, skills.length),
     alwaysOnTokens,
     scanned: skills.length,
     unique: unique.length

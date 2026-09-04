@@ -79,7 +79,7 @@ describe("cli", () => {
   it("prints the package version", async () => {
     const result = await run(["--version"]);
     expect(result.status).toBe(0);
-    expect(result.stdout).toMatch(/^skillcrit 0\.3\.0\n$/);
+    expect(result.stdout).toMatch(/^skillcrit 0\.4\.0\n$/);
     const dashV = await run(["-V"]);
     expect(dashV.stdout).toBe(result.stdout);
   });
@@ -89,6 +89,8 @@ describe("cli", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toMatch(/skillcrit cleanup plan/);
     expect(result.stdout).toMatch(/keep:/);
+    expect(result.stdout).toMatch(/skillcrit summary/);
+    expect(result.stdout).toMatch(/## questions/);
     expect(result.stdout).not.toMatch(/"findings"/);
   });
 
@@ -98,5 +100,35 @@ describe("cli", () => {
     expect(Array.isArray(payload.cleanup)).toBe(true);
     expect(payload.cleanup.length).toBeGreaterThan(0);
     expect(payload.unique).toBeLessThanOrEqual(payload.scanned);
+    expect(payload.questions.length).toBeGreaterThan(0);
+    expect(payload.tokens.alwaysOnNow).toBeGreaterThan(0);
+    expect(payload.tokens.saved).toBeGreaterThanOrEqual(0);
+  });
+
+  it("lists harness skill locations", async () => {
+    const result = await run(["roots", stacked, "--json"]);
+    expect(result.status).toBe(0);
+    const payload = JSON.parse(result.stdout);
+    const harnesses = payload.locations.map((l: { harness: string }) => l.harness);
+    expect(harnesses).toEqual(
+      expect.arrayContaining([
+        "agents",
+        "claude",
+        "cursor",
+        "codex",
+        "qwen",
+        "gemini",
+        "hermes",
+        "pi",
+        "opencode",
+        "deepseek"
+      ])
+    );
+    expect(
+      payload.locations.some(
+        (l: { rel: string; exists: boolean }) =>
+          l.rel === ".agents/skills" && l.exists
+      )
+    ).toBe(true);
   });
 });
