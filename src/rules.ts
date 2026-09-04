@@ -22,6 +22,7 @@ export type RuleId =
   | "SC1008"
   | "SC1009"
   | "SC1010"
+  | "SC1013"
   | "SC1011"
   | "SC1012"
   | "SC2001"
@@ -50,6 +51,12 @@ export type RuleSpec = {
 };
 
 export const RULES: Record<RuleId, RuleSpec> = {
+  SC1013: {
+    id: "SC1013",
+    title: "invalid optional frontmatter field type",
+    severity: "error",
+    remediation: "Use strings for license and compatibility; do not supply arrays, objects, numbers or null."
+  },
   SC1001: {
     id: "SC1001",
     title: "missing name",
@@ -115,7 +122,7 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "unrecognized frontmatter key",
     severity: "info",
     remediation:
-      "The spec defines name, description, license, compatibility, metadata and allowed-tools. Move client-specific keys under `metadata:`."
+      "Portability note: this field is outside the base specification. Check the target client's documentation; preserve supported top-level controls such as context and disable-model-invocation."
   },
   SC1011: {
     id: "SC1011",
@@ -176,7 +183,7 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "trigger contention",
     severity: "warning",
     remediation:
-      "Several skills describe the same trigger, so activation is a coin flip. Narrow the descriptions or disable all but one."
+      "Shared trigger phrases are a heuristic, not proof of activation contention. Review intended scope and measure triggering in the target client before narrowing descriptions or disabling skills."
   },
   SC3004: {
     id: "SC3004",

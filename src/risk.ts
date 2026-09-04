@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readInventoryText } from "./read.js";
 import { RULES, type RuleId } from "./rules.js";
 import type { RiskFinding } from "./types.js";
 
@@ -48,20 +49,25 @@ const MAX_EVIDENCE = 120;
 export function scanRisks(
   skillDir: string,
   body: string,
-  bodyLineOffset = 0
+  bodyLineOffset = 0,
+  onIncomplete: (reason: string) => void = reason => { throw new Error(`incomplete risk scan: ${reason}`); }
 ): RiskFinding[] {
   const findings: RiskFinding[] = [];
   // In SKILL.md only fenced code counts. Prose that mentions `rm -rf` while
   // warning against it is not a signal, and flagging it trains readers to
   // ignore the whole inventory.
   collect(findings, "SKILL.md", body, true, bodyLineOffset);
-  for (const file of bundledScripts(skillDir)) {
+  for (const file of bundledScripts(skillDir, onIncomplete)) {
     let text: string;
     try {
       const stat = fs.lstatSync(file);
-      if (!stat.isFile() || stat.size > MAX_BYTES) continue;
-      text = fs.readFileSync(file, "utf8");
+      if (!stat.isFile()) {
+        onIncomplete(`script is no longer a regular file: ${file}`);
+        continue;
+      }
+      text = readInventoryText(file, MAX_BYTES);
     } catch {
+      onIncomplete(`could not read script within ${MAX_BYTES}-byte limit: ${file}`);
       continue;
     }
     const rel = path.relative(skillDir, file).replace(/\\/g, "/");
@@ -124,27 +130,34 @@ function truncate(text: string): string {
   return text.length > MAX_EVIDENCE ? `${text.slice(0, MAX_EVIDENCE - 1)}…` : text;
 }
 
-function bundledScripts(skillDir: string): string[] {
+function bundledScripts(skillDir: string, onIncomplete: (reason: string) => void): string[] {
   const out: string[] = [];
   walk(skillDir, 0);
   return out;
 
   function walk(dir: string, depth: number): void {
-    if (depth > 3 || out.length >= MAX_FILES) return;
+    if (depth > 3) {
+      onIncomplete(`script walk stopped at depth 3 under ${skillDir}`);
+      return;
+    }
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
+      onIncomplete(`could not read script directory: ${dir}`);
       return;
     }
     for (const entry of entries) {
-      if (out.length >= MAX_FILES) return;
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === ".git") continue;
         walk(full, depth + 1);
       } else if (entry.isFile() && SCRIPT_EXT.test(entry.name)) {
-        out.push(full);
+        if (out.length >= MAX_FILES) {
+          onIncomplete(`script walk stopped after ${MAX_FILES} files under ${skillDir}`);
+        } else {
+          out.push(full);
+        }
       }
     }
   }
