@@ -127,9 +127,26 @@ Exit codes:
 | 0 | Clean, or only findings below the gate |
 | 1 | Findings at or above `--fail-on` (default `warning`) |
 | 2 | Bad usage — unknown command, flag, or flag value |
-| 3 | skillcrit could not run: missing config, refused write, unreadable root |
+| 3 | Run failed or coverage is incomplete: invalid config, refused write, missing/unreadable root, skipped input or traversal limit |
 
 Exit 1 is a result, not a crash.
+
+Targets must be existing directories; a `SKILL.md` file is not a directory target.
+Invalid configuration fails the run whether found automatically or selected with
+`--config`. Budgets must be non-negative safe integers (`alwaysOnTokens` may be
+`null`); invalid entries and unknown nested keys are rejected, not ignored.
+
+Scan, doctor and lint JSON include `coverage: { complete, reasons }`. A partial
+inventory still includes inspected results, but exits **3**, even with
+`--fail-on error`. SARIF records unsuccessful execution and coverage reasons;
+other formats show an incomplete-scan warning. `lint --fix` does not write a
+cleanup plan from incomplete input.
+
+Library callers: `scan()` throws on invalid targets or incomplete coverage by
+default. Supply `onTruncated(reason)` to explicitly receive partial results and
+every coverage reason. `scanRisks()` likewise accepts an optional fourth-argument
+callback for partial script inventory. Neither callback makes partial results
+complete; callers must carry that status into their own reports.
 
 ## How cleanup recommendations are chosen
 
@@ -155,7 +172,14 @@ Doctor JSON exposes `runtimeResolution: "unknown"`, `limitations`, and
 
 ## Output formats
 
-`--format text` (default), `json`, `markdown`, `sarif`, `github`.
+`lint` supports `--format text` (default), `json`, `markdown`, `sarif`, `github`.
+Other commands support only `text` and `json`; unsupported formats exit 2.
+`--fix` requires `lint` with text output.
+
+Trigger overlap is a phrase-matching heuristic, not measured contention. Clusters
+above 20 members get one summary with no pairwise details or cleanup ranking.
+Client-specific frontmatter controls are portability notes: preserve fields that
+the target client supports rather than moving operational controls into metadata.
 
 ```yaml
 # Annotate the diff, then gate separately, so a red job says which one failed.

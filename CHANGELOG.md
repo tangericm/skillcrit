@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Security
+
+- Reject frontmatter engine selectors before either parsing path; scanning
+  untrusted skills can no longer select gray-matter's JavaScript evaluator.
+- Bound inventory file reads and reject invalid frontmatter field types without
+  coercing untrusted objects.
+
+### Changed
+
+- Invalid discovered config, invalid directory targets, unreadable/oversized
+  input and incomplete traversal now fail with exit 3. JSON includes coverage;
+  SARIF reports unsuccessful execution. Partial scans cannot write cleanup plans.
+- `scan()` now throws on partial coverage unless its caller explicitly supplies
+  `onTruncated`. Script scanning exposes the same opt-in partial-result behavior.
+- Enforce strict config types, nested budget keys and non-negative integer
+  budgets. Loaded defaults no longer share nested mutable objects.
+- Reject unsupported output formats; `rules --format json` now honors JSON.
+- Replace quadratic overlap clustering with a phrase index. Above 20 cluster
+  members, omit pair details and speculative cleanup ranking.
+- Preserve client-specific operational frontmatter in remediation advice.
+
+### Fixed
+
+- Malformed metadata and non-directory command entries report incomplete
+  coverage without discarding otherwise readable skill records.
+- Unexpected CLI failures use exit 3 rather than the findings exit code.
+
+Migration: scripts that tolerated invalid config or assumed empty/partial scans
+were successful must handle exit 3. Non-lint commands accept text/JSON only.
+These contract changes remain unreleased; no package version or tag was changed.
+
 ## 0.5.0
 
 Audit installed agent skills, conflicts, and context costs. Runtime loading

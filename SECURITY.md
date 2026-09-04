@@ -9,15 +9,21 @@ and write to stdout. Evaluation has a separate execution boundary below.
 - The only audit output file it writes is the `--fix` cleanup markdown, and it refuses
   to write over `package.json`, `SKILL.md`, or `.env`.
 - It never deletes a skill. `--fix` produces a plan for a human to act on.
-- Without `--user` it reads the project tree only. With `--user` it also reads
-  the documented `$HOME` skill directories listed by `skillcrit roots`, and
-  nothing else.
-- Directory walks are bounded to depth 8 and 20,000 directories, and report
-  when they truncate.
+- Skill discovery is scoped to the project tree. With `--user` it also searches
+  the documented `$HOME` skill directories listed by `skillcrit roots`.
+  Configuration is searched upward through project ancestors unless `--config`
+  selects an explicit file; library callers can also supply extra skill roots.
+- Directory walks are bounded to depth 8 and 20,000 directories. Partial scans
+  exit 3 and report coverage reasons, including in machine-readable lint output.
+- SKILL.md, configuration, and inspected metadata files are limited to 1 MiB
+  each. Oversized/unreadable input is never silently reported as fully inspected.
 - `SKILLCRIT_HOME` overrides the home directory used for user-scope roots.
 
 Skill content is treated as data during inventory: skillcrit parses SKILL.md
 without executing its instructions or scripts.
+Only untagged `---` YAML frontmatter is accepted; engine selectors such as
+`---js` are rejected before parsing. This fixes an execution boundary violation
+in 0.5.0; do not use the unpatched version to scan untrusted skills.
 
 `eval` creates and deletes temporary workspaces and executes task test commands.
 It uses bundled tasks by default, but `--tasks` accepts a custom directory whose
@@ -33,7 +39,10 @@ grants. They exist to route a human to the lines worth reading.
 
 Bundled-script inventory skips symlinks and non-regular files. It checks at most
 64 files, three directory levels below the skill root, and 512 KiB per file.
-These limits are best-effort coverage, not proof every supporting file was read.
+Hitting these bounds or failing to read an eligible script marks coverage
+incomplete. Non-script assets, symlinks and intentionally excluded dependency
+directories remain outside this text-pattern inventory. Complete coverage means
+the supported inventory finished, not that every supporting file was analyzed.
 
 They are **not a security verdict**:
 
