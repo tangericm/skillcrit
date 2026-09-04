@@ -1,25 +1,36 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { runCommand } from "./run-command.js";
 import type { Adapter, EvalSummary, Metrics, TaskResult } from "./types.js";
 
 export type EvalOptions = {
-  tasksDir: string;
+  tasksDir?: string;
   packDir: string | null;
   adapter: Adapter;
 };
 
+const bundledTasks = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "fixtures/tasks"
+);
+
 export async function evalPack(options: EvalOptions): Promise<EvalSummary> {
+  const tasksDir = options.tasksDir ?? bundledTasks;
+  if (!fs.existsSync(tasksDir) || !fs.statSync(tasksDir).isDirectory()) {
+    throw new Error(`tasks dir not found: ${tasksDir}`);
+  }
   const tasks = fs
-    .readdirSync(options.tasksDir, { withFileTypes: true })
+    .readdirSync(tasksDir, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
 
   const results: TaskResult[] = [];
   for (const task of tasks) {
-    const taskDir = path.join(options.tasksDir, task);
+    const taskDir = path.join(tasksDir, task);
     const off = await runTask(taskDir, null, options.adapter);
     const on = await runTask(taskDir, options.packDir, options.adapter);
     results.push({ task, off, on });
