@@ -404,7 +404,7 @@ type SpecInput = {
 };
 
 /** Words that make a description say *when* to reach for the skill. */
-const TRIGGER_WORDS = /\b(?:use when|use this|when the user|when you|triggers? on|for when|invoke)\b/i;
+const TRIGGER_WORDS = /\b(?:use when|use this|when the user|when you|when asked|triggers? on|for when|invoke)\b/i;
 
 function specFindingsFor(input: SpecInput): SpecFinding[] {
   const out: SpecFinding[] = [];
@@ -445,7 +445,7 @@ function specFindingsFor(input: SpecInput): SpecFinding[] {
       add(
         "SC1012",
         "description",
-        "description does not say when to use the skill"
+        "description lacks a recognized activation phrase; review whether it clearly states when to use the skill"
       );
     }
   }

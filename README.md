@@ -19,10 +19,14 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Development preview:** `0.5.1-dev.0` is not published to npm yet. Build the
-current checkout and audit the project you choose:
+**Release candidate:** `0.5.1-rc.1` is available through the
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.1).
+Follow the [pilot guide](docs/pilot-guide.md) for checksum-verified installation.
+npm registry publication is still pending. To build from source:
 
 ```bash
+git clone https://github.com/tangericm/skillcrit.git
+cd skillcrit
 npm ci
 npm run build
 node dist/cli.js doctor /path/to/your/project --user
@@ -60,7 +64,8 @@ and risk signals across all scanned copies. The example above is abbreviated.
 
 ## Install
 
-For this development preview, build the checkout as above. To put that build on
+For this release candidate, use the [verified tarball](docs/pilot-guide.md) or
+build the checkout as above. To put that build on
 PATH, run `npm install -g .` from the built checkout and verify
 `skillcrit --version`. The plugin and agent-skill routes below require repository
 access and that separately installed CLI.
@@ -74,7 +79,7 @@ npm i -g skillcrit
 **Let your agent run it** — installs `skills/skillcrit` as an agent skill:
 
 ```bash
-# First install the CLI from the built checkout (development preview).
+# First install the CLI from the built checkout or verified candidate.
 skillcrit --version
 npx skills add tangericm/skillcrit
 ```
@@ -82,7 +87,7 @@ npx skills add tangericm/skillcrit
 **As a Claude Code plugin** — skill plus marketplace entry:
 
 ```bash
-# First install the CLI from the built checkout (development preview).
+# First install the CLI from the built checkout or verified candidate.
 skillcrit --version
 claude plugin marketplace add tangericm/skillcrit
 claude plugin install skillcrit@skillcrit
@@ -124,8 +129,8 @@ Exit codes:
 
 | Code | Meaning |
 | --- | --- |
-| 0 | Clean, or only findings below the gate |
-| 1 | Findings at or above `--fail-on` (default `warning`) |
+| 0 | Completed; `doctor`/`scan` may still report risks or alternatives. For `lint`, no findings reached its gate |
+| 1 | `lint` findings at or above `--fail-on` (default `warning`) |
 | 2 | Bad usage — unknown command, flag, or flag value |
 | 3 | Run failed or coverage is incomplete: invalid config, refused write, missing/unreadable root, skipped input or traversal limit |
 
@@ -246,12 +251,14 @@ Rule IDs are stable: `SC1xxx` spec conformance, `SC2xxx` context budget,
 retired check keeps its ID reserved. Unknown keys and unknown IDs are reported
 as warnings rather than ignored. `skillcrit rules` prints the catalogue.
 
-## Supported clients
+## Client inventory and compatibility
 
 `roots` resolves project, user, and admin skill directories for: Agent Skills
 (`.agents/skills`), Claude, Cursor, Codex, Qwen, Gemini, Hermes, Pi, OpenCode,
 Copilot, Continue, Goose, and DeepSeek — plus generic `skills/` and `plugins/`
-trees. Adding a client is a row in `LOCATION_SPECS`.
+trees. These are inventory locations, not a promise of native runtime support.
+The [compatibility matrix](docs/compatibility.md) separates tested installation
+and discovery from documentation-only support and untested activation behavior.
 
 ## Risk inventory
 
@@ -301,14 +308,18 @@ an anecdote.
 ## Development
 
 ```bash
-npm install
+npm ci
 npm run build
 npm test
-npx skillcrit lint . --fail-on error
+node dist/cli.js lint . --fail-on error
 ```
 
 CI runs the suite on Ubuntu, macOS, and Windows against Node 22 and 24, then
 lints skillcrit with itself.
+
+See [Contributing](CONTRIBUTING.md) for development contracts,
+[the pilot guide](docs/pilot-guide.md) to try the candidate and report feedback,
+and [Releasing](docs/releasing.md) for verification and promotion criteria.
 
 ## License
 

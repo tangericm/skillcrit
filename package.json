@@ -1,6 +1,6 @@
 {
   "name": "skillcrit",
-  "version": "0.5.1-dev.0",
+  "version": "0.5.1-rc.1",
   "description": "Audit installed agent skills, conflicts, and context costs.",
   "type": "module",
   "bin": {
@@ -16,6 +16,9 @@
     "dist",
     "skills",
     "docs",
+    "scripts/simulate.mjs",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
     "fixtures/tasks"
   ],
   "scripts": {
@@ -23,6 +26,7 @@
     "prepublishOnly": "npm run build",
     "test": "vitest run",
     "test:watch": "vitest",
+    "simulate": "node scripts/simulate.mjs",
     "skillcrit": "tsx src/cli.ts"
   },
   "engines": {
