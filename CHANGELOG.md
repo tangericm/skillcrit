@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1-rc.4 (simulated-user follow-up)
+
+- Fix the pilot installation instructions for Unicode folder names and existing parent npm projects.
+- Verify first-time installation from an empty folder and preserve the parent project in every package CI job.
+- Make budget rule advice and titles respect configured limits rather than quoting fixed defaults.
+- Record five controlled user profiles, prompted follow-up sessions, upgrade and uninstall evidence; these are simulations, not external adoption.
+
 ## 0.5.1-rc.3 (corrected pilot candidate)
 
 - Make cleanup export create a new file exclusively; existing files, hard links, symbolic links and dangling links are refused without changing their targets.

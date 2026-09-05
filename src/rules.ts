@@ -143,11 +143,11 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "body over the recommended instruction budget",
     severity: "warning",
     remediation:
-      "Keep SKILL.md under ~5000 tokens and move detail into `references/`. The whole body loads the moment the skill activates."
+      "Keep SKILL.md within the configured body-token budget and move detail into `references/`. Verify actual loading in the target client."
   },
   SC2002: {
     id: "SC2002",
-    title: "body over 500 lines",
+    title: "body over the configured line budget",
     severity: "info",
     remediation: "Split the body into `references/` files loaded on demand."
   },

@@ -19,8 +19,8 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Corrected release candidate:** `0.5.1-rc.3`. Get the built archive and checksum
-manifest from the [GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.3)
+**Corrected release candidate:** `0.5.1-rc.4`. Get the built archive and checksum
+manifest from the [GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.4)
 and follow the [pilot guide](docs/pilot-guide.md) to install it. Requires Node 22+.
 After installation:
 
@@ -71,7 +71,7 @@ project or put it on PATH with `npm install -g <verified-archive.tgz> --ignore-s
 The plugin and agent-skill routes below require repository access and a
 separately installed CLI. Check `skillcrit --version` before invoking them.
 
-Once registry publication is verified, `npm i -g skillcrit@0.5.1-rc.3` can
+Once registry publication is verified, `npm i -g skillcrit@0.5.1-rc.4` can
 replace the archive installation. `next` follows the registry prerelease;
 always check the resolved version.
 
@@ -192,7 +192,7 @@ the target client supports rather than moving operational controls into metadata
 Install the reviewed candidate in the repository you want to audit with
 `npm install --save-dev --save-exact <verified-archive.tgz> --ignore-scripts`
 and commit the package files and archive, so CI can reproduce the install.
-After verified registry publication, use `skillcrit@0.5.1-rc.3` instead of a
+After verified registry publication, use `skillcrit@0.5.1-rc.4` instead of a
 local archive. The workflow below uses that installed CLI. This remains a
 prerelease.
 
