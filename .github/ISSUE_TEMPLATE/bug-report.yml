@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible defect or misleading finding.
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: "This issue is public. Use SECURITY.md for vulnerabilities; redact private paths, credentials, and skill contents."
+  - type: input
+    id: environment
+    attributes:
+      label: Skillcrit version, Node version and OS
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Command, minimal shareable fixture, and configuration needed to reproduce it.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the rule ID, exit code and coverage status when available.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior and why
+      description: For client compatibility claims, include the client version and evidence from its native behavior.
+    validations:
+      required: true

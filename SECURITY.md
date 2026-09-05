@@ -22,7 +22,7 @@ and write to stdout. Evaluation has a separate execution boundary below.
 Skill content is treated as data during inventory: skillcrit parses SKILL.md
 without executing its instructions or scripts.
 Only untagged `---` YAML frontmatter is accepted; engine selectors such as
-`---js` are rejected before parsing. The `0.5.1-dev.0` development preview fixes
+`---js` are rejected before parsing. The `0.5.1-dev.0` and `0.5.1-rc.1` previews fix
 an execution boundary violation in 0.5.0; do not use unpatched 0.5.0 builds to
 scan untrusted skills.
 
@@ -64,4 +64,4 @@ Open a security advisory on the repository:
 Please do not open a public issue for a vulnerability report. Include the
 version (`skillcrit --version`), the platform, and a minimal reproduction.
 
-Supported: the latest published minor version.
+Supported during the pilot: `0.5.1-rc.1`. No stable npm release is available yet.

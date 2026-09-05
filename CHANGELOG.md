@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.1-rc.1 (pilot release candidate)
+
+- Keep projects inside agent-managed worktrees classified as project skills;
+  user classification now matches actual skill/plugin roots, not every file
+  below a client settings directory.
+- Add a self-serve pilot guide, feedback and bug forms, contribution guidance,
+  compatibility evidence, and an artifact-verification release runbook.
+- Record native Claude installation/discovery, Codex plain skill discovery,
+  and four controlled live skill invocations. Automatic triggering and external
+  usefulness remain unverified.
+- Clarify that aggregate findings have no source-file location.
+- Recognize "when asked" activation wording and phrase unmatched descriptions
+  as a heuristic review note, rather than proof of missing usage guidance.
+- Ship 13 repeatable CLI simulations and run them across the CI matrix.
+- Distribute a verified GitHub prerelease. npm publication remains a separate
+  authenticated step; this candidate does not establish stable readiness.
+
 ## 0.5.1-dev.0 (unpublished development preview)
 
 - Export aggregate SARIF findings as run metadata so GitHub accepts the report

@@ -6,7 +6,7 @@ compatibility: Requires Node 22+ and the skillcrit CLI reachable as a process.
 metadata:
   author: Eric Tang
   repo: https://github.com/tangericm/skillcrit
-  version: "0.5.1-dev.0"
+  version: "0.5.1-rc.1"
 ---
 
 # skillcrit
@@ -46,7 +46,8 @@ the user is reading it.
 
 Skill/plugin installation provides instructions only; the CLI is a separate prerequisite.
 Run `skillcrit --version`. If missing, explain that Node 22+ and
-the CLI are required. This is a development preview, not yet published to npm.
+the CLI are required. This is release candidate 0.5.1-rc.1; npm publication is
+still pending. A checksum-verified archive is available from the GitHub prerelease.
 With an authorized source checkout, build it using `npm ci` and `npm run build`,
 then use its `dist/cli.js` directly or install it with `npm install -g .`.
 After publication, `npm i -g skillcrit` is an alternative. Obtain approval before
@@ -67,8 +68,9 @@ unless that checkout is the project the user has open.
   Check `coverage.complete` and its reasons before treating a report as complete.
 - Progress goes to stderr and only on a TTY. Everything you report is on
   stdout.
-- Every finding carries a stable rule ID (`SC1002`, `SC4003`), a `file:line`,
-  and a fix. Quote the ID and the location; do not paraphrase them away.
+- Findings carry stable rule IDs (`SC1002`, `SC4003`) and remediation.
+  Quote source locations when present. Aggregate findings such as token totals
+  have no source-file location; never invent one.
 - `doctor` reports cleanup recommendations, not runtime loading. Preserve
   `runtimeResolution: "unknown"` and the report limitations. Equal SKILL.md
   bytes mean identical instructions; scripts and references may differ.

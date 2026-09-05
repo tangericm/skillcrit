@@ -56,6 +56,19 @@ describe("detectOrigin", () => {
     );
     expect(detectOrigin(nested)).toBe("project");
   });
+
+  it("keeps projects in agent-managed worktrees outside the user skill roots", () => {
+    for (const client of [".codex", ".claude", ".cursor"]) {
+      const file = path.join(os.homedir(), client, "worktrees", "app", ".agents", "skills", "review", "SKILL.md");
+      expect(detectOrigin(file)).toBe("project");
+    }
+  });
+
+  it("does not confuse similarly named directories with installed user skills", () => {
+    const file = path.join(os.homedir(), ".codex", "skills-backup", "app", "SKILL.md");
+    expect(detectOrigin(file)).toBe("project");
+    expect(detectOrigin(path.join(os.homedir(), ".codex", "skills", "review", "SKILL.md"))).toBe("user");
+  });
 });
 
 describe("rankSkill", () => {

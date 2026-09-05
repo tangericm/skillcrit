@@ -74,22 +74,11 @@ export const LOCATION_SPECS: SkillLocationSpec[] = [
   { harness: "codex", scope: "admin", rel: "/etc/codex/skills" }
 ];
 
-export const USER_HOME_PREFIXES = [
-  "/.agents/",
-  "/.claude/",
-  "/.cursor/",
-  "/.codex/",
-  "/.qwen/",
-  "/.gemini/",
-  "/.hermes/",
-  "/.pi/",
-  "/.opencode/",
-  "/.config/opencode/",
-  "/.continue/",
-  "/.goose/",
-  "/.deepseek/",
-  "/.copilot/"
-];
+// A client settings directory may also contain project worktrees. Only its
+// registered skill/plugin roots establish a user installation.
+export const USER_HOME_PREFIXES = LOCATION_SPECS
+  .filter(spec => spec.scope === "user")
+  .map(spec => `/${spec.rel}/`);
 
 export function listSkillLocations(
   root: string,

@@ -32,6 +32,17 @@ function ids(dir: string): RuleId[] {
 }
 
 describe("Agent Skills spec conformance", () => {
+  it("recognizes activation descriptions phrased as when asked", () => {
+    const dir = project("review", "name: review\ndescription: Review deployment changes when asked to review a deployment.");
+    expect(ids(dir)).not.toContain("SC1012");
+  });
+
+  it("keeps a wording review note when a description has no activation phrase", () => {
+    const dir = project("review", "name: review\ndescription: Reviews deployment changes.");
+    const finding = scan(dir)[0].specFindings.find(f => f.id === "SC1012");
+    expect(finding?.severity).toBe("info");
+  });
+
   it("accepts a conformant skill with no findings", () => {
     const dir = project(
       "tidy-csv",
