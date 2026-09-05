@@ -86,14 +86,21 @@ const SARIF_LEVEL: Record<Severity, string> = {
 
 export function formatSarif(report: LintReport): string {
   const used = new Set(report.findings.map((f) => f.id));
+  // GitHub rejects results without a physical location. Inventory-wide totals
+  // belong to the run, so preserve them without inventing a source-file anchor.
+  const located = report.findings.filter((f): f is LintFinding & { file: string } => Boolean(f.file));
+  const aggregateFindings = report.findings.filter(f => !f.file);
   const sarif = {
     $schema:
       "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
     version: "2.1.0",
     runs: [
       {
+        properties: {
+          ...(report.coverage ? { coverage: report.coverage } : {}),
+          aggregateFindings
+        },
         ...(report.coverage ? {
-          properties: { coverage: report.coverage },
           invocations: [{
             executionSuccessful: report.coverage.complete,
             toolExecutionNotifications: report.coverage.reasons.map(reason => ({ level: "error", message: { text: reason } }))
@@ -116,22 +123,20 @@ export function formatSarif(report: LintReport): string {
               }))
           }
         },
-        results: report.findings.map((finding) => ({
+        results: located.map((finding) => ({
           ruleId: finding.id,
           level: SARIF_LEVEL[finding.severity],
           message: { text: finding.message },
-          locations: finding.file
-            ? [
-                {
-                  physicalLocation: {
-                    artifactLocation: { uri: fileUri(finding.file, report.root) },
-                    ...(finding.line
-                      ? { region: { startLine: finding.line } }
-                      : {})
-                  }
-                }
-              ]
-            : []
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: fileUri(finding.file, report.root) },
+                ...(finding.line
+                  ? { region: { startLine: finding.line } }
+                  : {})
+              }
+            }
+          ]
         }))
       }
     ]

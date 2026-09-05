@@ -2,6 +2,10 @@
 
 ## 0.5.1-dev.0 (unpublished development preview)
 
+- Export aggregate SARIF findings as run metadata so GitHub accepts the report
+  without fabricated file locations; require successful SARIF uploads in CI.
+- Update the workflow to current Node 24-based GitHub Actions.
+
 ### Security
 
 - Reject frontmatter engine selectors before either parsing path; scanning

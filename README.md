@@ -196,8 +196,8 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '24'
           cache: npm
@@ -208,11 +208,15 @@ jobs:
 ```
 
 For code scanning, additionally generate SARIF with the same installed CLI and
-upload it using `github/codeql-action/upload-sarif`; that job needs
+upload it using `github/codeql-action/upload-sarif@v4`; that job needs
 `security-events: write` and code scanning enabled for the repository.
 
 `github` prints workflow-command annotations, so findings land on the diff.
-`sarif` is SARIF 2.1.0 and uploads to code scanning.
+`sarif` is SARIF 2.1.0 and uploads file-level findings to code scanning.
+Inventory-wide findings, such as the estimated token total, are retained in
+`runs[].properties.aggregateFindings` because GitHub requires a source location
+for each displayed alert. These findings still appear in other report formats
+and count toward the CLI exit-code gate.
 
 ## Configuration
 
