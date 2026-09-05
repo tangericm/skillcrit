@@ -22,6 +22,7 @@ export type RuleId =
   | "SC1008"
   | "SC1009"
   | "SC1010"
+  | "SC1013"
   | "SC1011"
   | "SC1012"
   | "SC2001"
@@ -50,6 +51,12 @@ export type RuleSpec = {
 };
 
 export const RULES: Record<RuleId, RuleSpec> = {
+  SC1013: {
+    id: "SC1013",
+    title: "invalid optional frontmatter field type",
+    severity: "error",
+    remediation: "Use strings for license and compatibility; do not supply arrays, objects, numbers or null."
+  },
   SC1001: {
     id: "SC1001",
     title: "missing name",
@@ -61,7 +68,7 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "name does not match folder",
     severity: "warning",
     remediation:
-      "Rename the folder or the `name:` so they match. Clients load the skill anyway, but the spec requires the two to agree and collision handling keys on the name."
+      "The base specification requires the folder and name to match. Check the target client's naming behavior before renaming either."
   },
   SC1003: {
     id: "SC1003",
@@ -81,14 +88,14 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "missing description",
     severity: "error",
     remediation:
-      "Add a `description:`. Conformant clients skip a skill with no description, so this one never loads."
+      "Add a non-empty description to satisfy the base specification. Whether this skill loads must be checked in the target client."
   },
   SC1006: {
     id: "SC1006",
     title: "description longer than 1024 characters",
     severity: "error",
     remediation:
-      "Trim `description:` to 1024 characters. It is loaded for every session, so shorter is also cheaper."
+      "Trim description to 1024 characters to satisfy the base specification. Actual catalogue loading depends on the client and skill controls."
   },
   SC1007: {
     id: "SC1007",
@@ -115,7 +122,7 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "unrecognized frontmatter key",
     severity: "info",
     remediation:
-      "The spec defines name, description, license, compatibility, metadata and allowed-tools. Move client-specific keys under `metadata:`."
+      "Portability note: this field is outside the base specification. Check the target client's documentation; preserve supported top-level controls such as context and disable-model-invocation."
   },
   SC1011: {
     id: "SC1011",
@@ -129,7 +136,7 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "description does not say when to use the skill",
     severity: "info",
     remediation:
-      "Say what the skill does and when to reach for it. The model matches on this text alone; a description with no trigger wording rarely activates."
+      "State what the skill does and when to use it. This wording check does not measure activation reliability; verify triggering in the target client."
   },
   SC2001: {
     id: "SC2001",
@@ -149,47 +156,47 @@ export const RULES: Record<RuleId, RuleSpec> = {
     title: "always-on skill",
     severity: "warning",
     remediation:
-      "An always-on skill pays its full body on every turn, not just when relevant. Confirm that is intended."
+      "Body wording or plugin hooks suggest reviewing context cost. Verify actual loading in the target client; this signal does not establish that the skill body is always loaded."
   },
   SC2004: {
     id: "SC2004",
     title: "always-loaded token total",
     severity: "info",
-    remediation: "Informational total for the whole installed estate."
+    remediation: "Estimated total for a hypothetical inventory set. Client selection and actual session usage remain unknown."
   },
   SC3001: {
     id: "SC3001",
     title: "duplicate copy",
     severity: "warning",
     remediation:
-      "Keep one copy. Identical copies in several roots each cost catalogue tokens and make it ambiguous which path a fix should edit."
+      "Equal SKILL.md bytes do not establish equivalent packages or duplicate runtime loading. Compare supporting files and client usage before removing any path."
   },
   SC3002: {
     id: "SC3002",
     title: "version conflict",
     severity: "warning",
     remediation:
-      "Two different bodies share one name. Only the winner loads; remove or rename the loser."
+      "Instruction files or metadata differ under one name. Verify client namespaces, enablement, permissions and supporting files before choosing whether either copy should change. Cleanup ranking is not runtime precedence."
   },
   SC3003: {
     id: "SC3003",
     title: "trigger contention",
     severity: "warning",
     remediation:
-      "Several skills describe the same trigger, so activation is a coin flip. Narrow the descriptions or disable all but one."
+      "Shared trigger phrases are a heuristic, not proof of activation contention. Review intended scope and measure triggering in the target client before narrowing descriptions or disabling skills."
   },
   SC3004: {
     id: "SC3004",
     title: "overlapping trigger phrase",
     severity: "warning",
-    remediation: "Reword one of the two descriptions so the shared phrase is unique."
+    remediation: "Review whether the skills cover different tasks. Shared wording alone does not require a rewrite or establish runtime contention."
   },
   SC3005: {
     id: "SC3005",
     title: "duplicate slash command",
     severity: "warning",
     remediation:
-      "Two packs register the same command name. Rename one; which one wins is client-specific."
+      "Two packs declare the same command basename. Verify the client's plugin namespaces before treating this as a conflict or renaming a command."
   },
   SC3006: {
     id: "SC3006",

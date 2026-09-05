@@ -59,12 +59,14 @@ export function formatSummary(report: LintReport): string {
   const t = report.tokens;
   const lines = [
     "# skillcrit summary",
+    "Runtime selection: unknown",
+    ...(report.limitations ?? ["Token totals estimate a hypothetical set; client loading has not been verified."]),
     `${report.unique} unique / ${report.scanned} scanned`,
-    `~${t.alwaysOnNow} always-on tokens now`,
+    `~${t.alwaysOnNow} estimated tokens for the hypothetical inventory set`,
     t.saved > 0
       ? `~${t.afterCleanup} after recommended cleanup (−${t.saved})`
       : `~${t.afterCleanup} after recommended cleanup (no token change)`,
-    `~${t.descriptionOnly} if always-on skills were description-only`,
+    `~${t.descriptionOnly} estimated catalogue tokens with descriptions only`,
     `${errors} errors  ${warnings} warnings  ${info} info`,
     ""
   ];
@@ -78,7 +80,7 @@ export function formatSummary(report: LintReport): string {
     lines.push(`${q.id}. [${q.kind} / ${tag}] ${q.prompt}`);
     lines.push(`   keep: ${displayPath(q.keep, report.root)}`);
     for (const drop of q.drop) {
-      lines.push(`   drop: ${displayPath(drop, report.root)}`);
+      lines.push(`   alternative: ${displayPath(drop, report.root)}`);
     }
   }
   lines.push("");
@@ -88,9 +90,9 @@ export function formatSummary(report: LintReport): string {
 function promptFor(action: CleanupAction): string {
   switch (action.kind) {
     case "prefer-skill":
-      return `Keep the higher-ranked skill and disable overlapping copies?`;
+      return `Compare intended tasks and actual client triggering for these skills?`;
     case "pick-version":
-      return `Keep this version and remove the other variants?`;
+      return `Compare versions, permissions, supporting files and client namespaces before choosing a copy?`;
     case "drop-copy":
       return `Review supporting files and client usage before removing identical instruction copies?`;
     case "ignore-mirror":

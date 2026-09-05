@@ -14,7 +14,7 @@ export function isFormat(value: string): value is Format {
 }
 
 export function formatText(report: LintReport): string {
-  let out = "";
+  let out = coverageWarning(report);
   for (const finding of report.findings) {
     const where = location(finding, report.root);
     out += `${finding.severity} ${finding.id} ${finding.rule}: ${finding.message}\n`;
@@ -30,7 +30,10 @@ export function formatMarkdown(report: LintReport): string {
   const lines = [
     "# skillcrit lint",
     "",
-    `${report.unique} unique / ${report.scanned} scanned — ~${report.tokens.alwaysOnNow} always-loaded tokens`,
+    coverageWarning(report).trim(),
+    "Runtime selection: unknown",
+    ...(report.limitations ?? ["Token totals estimate a hypothetical set; client loading has not been verified."]),
+    `${report.unique} unique / ${report.scanned} scanned — ~${report.tokens.alwaysOnNow} estimated tokens for a hypothetical set`,
     ""
   ];
   if (report.findings.length === 0) {
@@ -61,7 +64,8 @@ export function formatMarkdown(report: LintReport): string {
 
 /** GitHub Actions workflow-command annotations, one line per finding. */
 export function formatGithub(report: LintReport): string {
-  let out = "";
+  let out = report.coverage?.complete === false
+    ? `::error title=Incomplete scan::${escapeData(coverageWarning(report).trim())}\n` : "";
   for (const finding of report.findings) {
     const level = finding.severity === "info" ? "notice" : finding.severity;
     const bits = [
@@ -82,12 +86,26 @@ const SARIF_LEVEL: Record<Severity, string> = {
 
 export function formatSarif(report: LintReport): string {
   const used = new Set(report.findings.map((f) => f.id));
+  // GitHub rejects results without a physical location. Inventory-wide totals
+  // belong to the run, so preserve them without inventing a source-file anchor.
+  const located = report.findings.filter((f): f is LintFinding & { file: string } => Boolean(f.file));
+  const aggregateFindings = report.findings.filter(f => !f.file);
   const sarif = {
     $schema:
       "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
     version: "2.1.0",
     runs: [
       {
+        properties: {
+          ...(report.coverage ? { coverage: report.coverage } : {}),
+          aggregateFindings
+        },
+        ...(report.coverage ? {
+          invocations: [{
+            executionSuccessful: report.coverage.complete,
+            toolExecutionNotifications: report.coverage.reasons.map(reason => ({ level: "error", message: { text: reason } }))
+          }]
+        } : {}),
         tool: {
           driver: {
             name: "skillcrit",
@@ -105,27 +123,30 @@ export function formatSarif(report: LintReport): string {
               }))
           }
         },
-        results: report.findings.map((finding) => ({
+        results: located.map((finding) => ({
           ruleId: finding.id,
           level: SARIF_LEVEL[finding.severity],
           message: { text: finding.message },
-          locations: finding.file
-            ? [
-                {
-                  physicalLocation: {
-                    artifactLocation: { uri: fileUri(finding.file, report.root) },
-                    ...(finding.line
-                      ? { region: { startLine: finding.line } }
-                      : {})
-                  }
-                }
-              ]
-            : []
+          locations: [
+            {
+              physicalLocation: {
+                artifactLocation: { uri: fileUri(finding.file, report.root) },
+                ...(finding.line
+                  ? { region: { startLine: finding.line } }
+                  : {})
+              }
+            }
+          ]
         }))
       }
     ]
   };
   return JSON.stringify(sarif, null, 2) + "\n";
+}
+
+function coverageWarning(report: LintReport): string {
+  return report.coverage?.complete === false
+    ? `Incomplete scan: ${report.coverage.reasons.join("; ")}\n` : "";
 }
 
 function fileUri(file: string, root: string | undefined): string {

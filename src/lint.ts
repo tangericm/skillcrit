@@ -44,7 +44,9 @@ const STOP = new Set([
 ]);
 
 function identityKey(skill: SkillRecord): string {
-  return `${skill.name}\n${skill.description}\n${skill.body}`;
+  // Include all frontmatter, including client controls. Matching bodies alone
+  // cannot establish identical instructions or equivalent permissions.
+  return `${skill.name}\n${skill.hash}`;
 }
 
 export function lint(
@@ -93,7 +95,7 @@ export function lint(
     }
   }
 
-  findings.push(...contentionClusters(unique, cleanup, emit));
+  for (const finding of contentionClusters(unique, cleanup, emit)) findings.push(finding);
   findings.push(...duplicateCommands(unique, emit));
 
   let alwaysOnTokens = 0;
@@ -103,13 +105,13 @@ export function lint(
       : skill.descriptionTokens;
     if (skill.alwaysOn) {
       const why = skill.hooks
-        ? "plugin hooks stay loaded"
+        ? "plugin declares hooks"
         : "always-on body phrasing";
       const finding = emit(
         "SC2003",
         "always-on",
         [skill.name],
-        `${skill.name} is always-on (${why}); ~${skill.alwaysOnTokens} tokens`,
+        `${skill.name} has an always-on signal (${why}); ~${skill.alwaysOnTokens} estimated tokens if its body is loaded`,
         { file: skill.skillFile }
       );
       if (finding) findings.push(finding);
@@ -123,8 +125,8 @@ export function lint(
     "always-loaded-tokens",
     unique.map((s) => s.name),
     overBudget
-      ? `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned) — over the configured budget of ${budget}`
-      : `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned)`,
+      ? `~${alwaysOnTokens} estimated tokens for the hypothetical set of ${unique.length} unique instruction files (${skills.length} scanned) — over the configured budget of ${budget}`
+      : `~${alwaysOnTokens} estimated tokens for the hypothetical set of ${unique.length} unique instruction files (${skills.length} scanned)`,
     {},
     overBudget ? "warning" : undefined
   );
@@ -132,6 +134,12 @@ export function lint(
 
   return {
     root,
+    runtimeResolution: "unknown",
+    limitations: [
+      "Cleanup ranking is not runtime precedence. Verify client namespaces, enablement and validity before removing a copy.",
+      "Identical instructions means equal SKILL.md bytes; scripts, references and other package files may differ.",
+      "Token totals and savings estimate a hypothetical set, not a measured session. Hooks and body phrasing do not prove loading."
+    ],
     findings,
     cleanup,
     questions: cleanupQuestions(cleanup),
@@ -196,7 +204,7 @@ function duplicateCopies(
       // unreadable in a terminal.
       extrasAreMirrors
         ? `${keep.name} has ${n} identical instruction ${copyWord} (cache/marketplace); keeping the ${keep.origin} copy`
-        : `${keep.name} is installed at ${ranked.length} paths — organize to one copy, keeping the ${keep.origin} one`,
+        : `${keep.name} has identical instruction files at ${ranked.length} paths — review supporting files and client usage before cleanup`,
       {
         file: keep.skillFile,
         keep: keep.skillFile,
@@ -266,7 +274,7 @@ function versionConflicts(
         "pick-version",
         [keep],
         drop,
-        `multiple versions of ${name}; disable or remove older/lower-rank copies`,
+        `alternative instruction files or metadata for ${name}; verify client namespaces, permissions and supporting files before changing any copy`,
         true
       )
     );
@@ -282,6 +290,16 @@ function contentionClusters(
   const clusters = overlapClusters(skills);
   const findings: LintFinding[] = [];
   for (const members of clusters) {
+    // Dense clusters carry no evidence that hundreds of skills should be
+    // disabled. Summarize membership instead of emitting every pair or
+    // computing a speculative cleanup set.
+    if (members.length > 20) {
+      const summary = emit("SC3003", "contention", members.map(s => s.name),
+        `${members.length} skills share trigger phrases (heuristic). Review this cluster; pair details and cleanup ranking omitted above 20 members.`,
+        { file: members[0].skillFile });
+      if (summary) findings.push(summary);
+      continue;
+    }
     const ranked = [...members].sort(byRankDesc);
     const { keep, drop } = independentSet(members);
     const phrase = firstOverlapPhrase(members) ?? "the same trigger";
@@ -291,7 +309,7 @@ function contentionClusters(
       "SC3003",
       "contention",
       ranked.map((s) => s.name),
-      `${ranked.length} skills contend on “${phrase}”. Suggested order: ${order}. Keep ${keepNames}.`,
+      `${ranked.length} skills share “${phrase}” (heuristic, not measured contention). Review suggested order: ${order}. Candidate: ${keepNames}.`,
       {
         file: keep[0].skillFile,
         keep: keep[0].skillFile,
@@ -320,7 +338,7 @@ function contentionClusters(
         "prefer-skill",
         keep,
         drop,
-        `overlapping triggers; keep ${keep.map(labelSkill).join(", ")} enabled and consider disabling the rest`,
+        `shared trigger phrases; compare intended tasks and measure client triggering before changing any skill`,
         true
       )
     );
@@ -359,39 +377,39 @@ function firstOverlapPhrase(members: SkillRecord[]): string | undefined {
 }
 
 function overlapClusters(skills: SkillRecord[]): SkillRecord[][] {
-  const n = skills.length;
-  const adj: number[][] = Array.from({ length: n }, () => []);
-  for (let i = 0; i < n; i++) {
-    for (let j = i + 1; j < n; j++) {
-      // Two copies of one name are a version conflict (SC3002), not two
-      // skills competing for the same trigger.
-      if (skills[i].name === skills[j].name) continue;
-      if (sharedPhrases(skills[i].description, skills[j].description).length === 0) {
-        continue;
-      }
-      adj[i].push(j);
-      adj[j].push(i);
+  // Index phrases once and union their owners. No quadratic adjacency graph.
+  const parent = skills.map((_, i) => i);
+  const find = (i: number): number => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
     }
-  }
-  const seen = new Set<number>();
-  const clusters: SkillRecord[][] = [];
-  for (let i = 0; i < n; i++) {
-    if (seen.has(i) || adj[i].length === 0) continue;
-    const stack = [i];
-    const members: SkillRecord[] = [];
-    seen.add(i);
-    while (stack.length) {
-      const u = stack.pop()!;
-      members.push(skills[u]);
-      for (const v of adj[u]) {
-        if (seen.has(v)) continue;
-        seen.add(v);
-        stack.push(v);
-      }
+    return i;
+  };
+  const owners = new Map<string, number[]>();
+  skills.forEach((skill, i) => {
+    for (const phrase of new Set(contentNgrams(skill.description, 3))) {
+      const group = owners.get(phrase);
+      if (group) group.push(i);
+      else owners.set(phrase, [i]);
     }
-    if (members.length >= 2) clusters.push(members);
+  });
+  for (const group of owners.values()) {
+    const first = group[0];
+    // Same-name versions alone are not trigger contention. Once another name
+    // shares the phrase, every owner belongs to the same connected component.
+    if (!group.some(i => skills[i].name !== skills[first].name)) continue;
+    const root = find(first);
+    for (const i of group) parent[find(i)] = root;
   }
-  return clusters;
+  const groups = new Map<number, SkillRecord[]>();
+  skills.forEach((skill, i) => {
+    const key = find(i);
+    const members = groups.get(key);
+    if (members) members.push(skill);
+    else groups.set(key, [skill]);
+  });
+  return [...groups.values()].filter(members => members.length > 1);
 }
 
 function duplicateCommands(skills: SkillRecord[], emit: Emit): LintFinding[] {
@@ -433,6 +451,7 @@ export function cleanupPlan(report: LintReport): string {
     "# skillcrit cleanup",
     "",
     "Dry-run. No skill files were deleted or modified.",
+    "Runtime selection: unknown. Cleanup ranking and token estimates do not establish what a client loads.",
     "",
     `${report.unique} unique / ${report.scanned} scanned`,
     ""
@@ -453,11 +472,7 @@ export function cleanupPlan(report: LintReport): string {
     }
     lines.push("");
     if (action.orphans.length > 0) {
-      const verb =
-        action.kind === "ignore-mirror"
-          ? "optional ignore/delete"
-          : "delete or disable";
-      lines.push(`**Orphans** (${verb})`);
+      lines.push("**Alternatives** (review supporting files and client usage before changes)");
       lines.push("");
       for (const orphan of action.orphans) {
         lines.push(`- \`${displayPath(orphan.dir, report.root)}\` — ${orphan.why}`);
@@ -465,14 +480,16 @@ export function cleanupPlan(report: LintReport): string {
       lines.push("");
     }
   }
-  if (spec.length > 0) {
-    lines.push("## Spec errors");
-    lines.push("");
-    lines.push("**Orphans** (fix or delete)");
-    lines.push("");
-    for (const finding of spec) {
+  for (const [title, findings] of [
+    ["Spec findings to review", spec.filter(f => f.severity !== "info")],
+    ["Informational notes", spec.filter(f => f.severity === "info")]
+  ] as const) {
+    if (findings.length === 0) continue;
+    lines.push(`## ${title}`, "");
+    for (const finding of findings) {
       const dir = finding.keep ?? finding.skills[0];
-      lines.push(`- \`${displayPath(dir, report.root)}\` — ${finding.id} ${finding.message}`);
+      lines.push(`- \`${displayPath(dir, report.root)}\` — ${finding.severity} ${finding.id} ${finding.message}`);
+      if (finding.remediation) lines.push(`  ${finding.remediation}`);
     }
     lines.push("");
   }
@@ -546,7 +563,6 @@ function orphanWhy(
     } else if (drop.version && keep.version && drop.version !== keep.version) {
       bits.push(`${dropVer} vs keep ${formatVer(keep.origin, keep.version)}`);
     }
-    if (drop.specIssues[0]) bits.push(drop.specIssues[0]);
     return bits.join("; ") || dropVer;
   }
   return `overlapping triggers; ${dropVer}, lower rank than ${keep.name}`;

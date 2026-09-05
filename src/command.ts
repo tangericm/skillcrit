@@ -18,7 +18,7 @@ import { formatRoots, listSkillLocations } from "./roots.js";
 import { RULES, SEVERITY_ORDER, ruleIds } from "./rules.js";
 import { scan } from "./scan.js";
 import { formatSummary } from "./summary.js";
-import type { LintReport, Severity } from "./types.js";
+import type { LintReport, ScanCoverage, Severity } from "./types.js";
 import { packageVersion } from "./version.js";
 
 /**
@@ -32,6 +32,15 @@ import { packageVersion } from "./version.js";
 export const EXIT = { ok: 0, findings: 1, usage: 2, error: 3 } as const;
 
 export async function main(argv: string[]): Promise<number> {
+  try {
+    return await runMain(argv);
+  } catch (err) {
+    process.stderr.write(`skillcrit: ${String(err)}\n`);
+    return EXIT.error;
+  }
+}
+
+async function runMain(argv: string[]): Promise<number> {
   let parsed: ReturnType<typeof parseArgs>;
   try {
     parsed = parseArgs(argv);
@@ -46,11 +55,6 @@ export async function main(argv: string[]): Promise<number> {
     return EXIT.ok;
   }
 
-  if (command === "rules") {
-    process.stdout.write(json ? rulesJson() : rulesTable());
-    return EXIT.ok;
-  }
-
   if (help || !command || command === "help" || command === "--help") {
     const topic = help ? command : positionalHelpTopic(command, target);
     process.stdout.write(commandHelp(topic) ?? usage());
@@ -59,6 +63,25 @@ export async function main(argv: string[]): Promise<number> {
 
   const root = target ?? process.cwd();
   const format: Format = json ? "json" : parsed.format;
+  if (!COMMANDS.has(command)) {
+    process.stderr.write(`unknown command: ${command}\n${usage()}`);
+    return EXIT.usage;
+  }
+  if (command !== "lint" && format !== "text" && format !== "json") {
+    process.stderr.write(`skillcrit ${command} does not support --format ${format}; use text or json\n`);
+    return EXIT.usage;
+  }
+  if (parsed.fix && (command !== "lint" || format !== "text")) {
+    process.stderr.write("--fix requires lint with --format text\n");
+    return EXIT.usage;
+  }
+  if (command === "rules") {
+    process.stdout.write(format === "json" ? rulesJson() : rulesTable());
+    return EXIT.ok;
+  }
+  if (command !== "eval" && !fs.statSync(root).isDirectory()) {
+    throw new Error(`target must be a directory: ${root}`);
+  }
   const progress = createProgress(
     format === "text" && Boolean(process.stderr.isTTY)
   );
@@ -80,13 +103,14 @@ export async function main(argv: string[]): Promise<number> {
     for (const warning of loaded.warnings) {
       process.stderr.write(`skillcrit: ${warning}\n`);
     }
-    if (loaded.warnings.length > 0 && parsed.config) return EXIT.error;
+    if (loaded.warnings.length > 0) return EXIT.error;
   } catch (err) {
     process.stderr.write(`skillcrit: ${String(err)}\n`);
     return EXIT.error;
   }
   if (parsed.failOn) config = { ...config, failOn: parsed.failOn };
 
+  const coverage: ScanCoverage = { complete: true, reasons: [] };
   const runScan = (risks: boolean) => {
     progress.phase("scan");
     return scan(root, {
@@ -94,7 +118,11 @@ export async function main(argv: string[]): Promise<number> {
       config,
       risks,
       onProgress: (n) => progress.tick("scan", n),
-      onTruncated: (reason) => process.stderr.write(`skillcrit: ${reason}\n`)
+      onTruncated: (reason) => {
+        coverage.complete = false;
+        coverage.reasons.push(reason);
+        process.stderr.write(`skillcrit: incomplete scan: ${reason}\n`);
+      }
     });
   };
 
@@ -102,7 +130,7 @@ export async function main(argv: string[]): Promise<number> {
     const skills = runScan(false);
     progress.done(`scanned ${skills.length} skills`);
     if (format === "json") {
-      process.stdout.write(JSON.stringify({ skills }, null, 2) + "\n");
+      process.stdout.write(JSON.stringify({ skills, coverage }, null, 2) + "\n");
     } else {
       for (const skill of skills) {
         const pack = skill.pack ? ` [${skill.pack}]` : "";
@@ -111,9 +139,9 @@ export async function main(argv: string[]): Promise<number> {
           `${skill.name}${ver}${pack}  ${skill.origin}  ${skill.descriptionTokens} tok\n`
         );
       }
-      process.stdout.write(`${skills.length} skills\n`);
+      process.stdout.write(`${skills.length} skills${coverage.complete ? "" : " (incomplete scan)"}\n`);
     }
-    return EXIT.ok;
+    return coverage.complete ? EXIT.ok : EXIT.error;
   }
 
   if (command === "doctor" || command === "inspect") {
@@ -124,21 +152,26 @@ export async function main(argv: string[]): Promise<number> {
       `${report.recommendations.length} recommendations / ${report.alternatives} alternatives; runtime unknown`
     );
     if (format === "json") {
-      process.stdout.write(JSON.stringify(report, null, 2) + "\n");
+      process.stdout.write(JSON.stringify({ ...report, coverage }, null, 2) + "\n");
     } else {
-      process.stdout.write(formatDoctor(report));
+      process.stdout.write((coverage.complete ? "" : "Incomplete scan\n") + formatDoctor(report));
     }
-    return EXIT.ok;
+    return coverage.complete ? EXIT.ok : EXIT.error;
   }
 
   if (command === "lint") {
     const skills = runScan(true);
     progress.phase("lint");
     const report = lint(skills, config, root);
+    report.coverage = coverage;
     progress.done(
       `${report.unique} unique / ${report.scanned} scanned  ~${report.tokens.alwaysOnNow} tok`
     );
     if (parsed.fix && format === "text") {
+      if (!coverage.complete) {
+        process.stdout.write(renderLint(report, format));
+        return EXIT.error;
+      }
       const md = cleanupPlan(report);
       process.stdout.write(md);
       process.stdout.write(formatSummary(report));
@@ -151,7 +184,7 @@ export async function main(argv: string[]): Promise<number> {
       return gate(report, config.failOn);
     }
     process.stdout.write(renderLint(report, format));
-    return gate(report, config.failOn);
+    return coverage.complete ? gate(report, config.failOn) : EXIT.error;
   }
 
   if (command === "eval") {
@@ -319,7 +352,7 @@ function usage(): string {
 
 Common flags
   --user                also read the documented $HOME skill roots
-  --format <f>          text (default), json, markdown, sarif, github
+  --format <f>          text (default), json; lint also markdown, sarif, github
   --json                shorthand for --format json
   --fail-on <severity>  error | warning (default) | info
   --config <file>       use this .skillcrit.json instead of searching upward
@@ -329,7 +362,7 @@ Exit codes
   0  clean, or only findings below the gate
   1  findings at or above --fail-on
   2  usage error
-  3  run failed (bad config, adapter error, refused write)
+  3  run failed or incomplete (bad input/config, skipped files, traversal limit)
 
 60-second audit
   npm i -g skillcrit
@@ -347,7 +380,7 @@ recommended set; risk inventory covers all scanned copies.
   skillcrit doctor . --user
   skillcrit doctor . --user --json > estate.json
 
-\`inspect\` is an alias. Always exits 0 — it reports, it does not judge.`,
+\`inspect\` is an alias. Exits 0 for a complete report, 3 for failed/incomplete input.`,
 
   lint: `skillcrit lint [path] [--user] [--fix] [--out <file>]
                     [--format text|json|markdown|sarif|github]

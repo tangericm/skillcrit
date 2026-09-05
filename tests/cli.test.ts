@@ -83,7 +83,7 @@ describe("cli", () => {
     expect(result.status).toBe(1);
     expect(result.stdout).toMatch(/skillcrit cleanup/);
     expect(result.stdout).toMatch(/\*\*Keep\*\*/);
-    expect(result.stdout).toMatch(/\*\*Orphans\*\*/);
+    expect(result.stdout).toMatch(/\*\*Alternatives\*\*/);
     expect(result.stdout).toMatch(/skillcrit summary/);
     expect(result.stdout).toMatch(/## questions/);
     expect(result.stdout).not.toMatch(/"findings"/);

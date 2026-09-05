@@ -4,6 +4,9 @@ export type SkillOrigin = "project" | "user" | "marketplace" | "cache";
 
 export type Severity = "error" | "warning" | "info";
 
+/** Coverage of the supported inventory, not a security or runtime verdict. */
+export type ScanCoverage = { complete: boolean; reasons: string[] };
+
 /** One spec/budget defect found while parsing a single SKILL.md. */
 export type SpecFinding = {
   id: RuleId;
@@ -116,6 +119,7 @@ export type CleanupQuestion = {
 export type TokenComparison = {
   scanned: number;
   unique: number;
+  /** Legacy name: a hypothetical inventory estimate, not observed usage. */
   alwaysOnNow: number;
   afterCleanup: number;
   saved: number;
@@ -123,6 +127,10 @@ export type TokenComparison = {
 };
 
 export type LintReport = {
+  /** Present on new reports; optional for callers rendering older reports. */
+  runtimeResolution?: "unknown";
+  limitations?: string[];
+  coverage?: ScanCoverage;
   /**
    * Scanned root, when the caller knew one. Renderers print paths relative to
    * it; SARIF and GitHub annotations need repo-relative paths to line up with

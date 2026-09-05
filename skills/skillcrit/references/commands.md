@@ -24,9 +24,10 @@ skillcrit lint [path] --fix [--out <file>]
 
 Every finding with a rule ID, a `file:line`, and a remediation.
 
-`--fix` prints a dry-run cleanup plan: per group, the **Keep** directory, then
-**Orphans** to delete or disable, then numbered questions and a token
-comparison. It writes `skillcrit-cleanup.md` by default. `--out -` skips the
+`--fix` prints a dry-run cleanup plan: per group, the candidate **Keep** directory,
+then **Alternatives** for review, numbered questions, and estimated token
+comparisons. Informational notes and spec findings are shown separately with
+their severity and remediation. It writes `skillcrit-cleanup.md` by default. `--out -` skips the
 write. `--out package.json`, `SKILL.md`, or `.env` is refused with exit 3. It
 never deletes a skill file.
 
@@ -94,7 +95,7 @@ with the user's permissions, without a security sandbox, in temporary workspaces
 | 0 | Clean, or only findings below the gate |
 | 1 | Findings at or above the gate |
 | 2 | Bad usage: unknown command, flag, or flag value |
-| 3 | Could not run: missing config, refused write, unreadable root |
+| 3 | Run failed or coverage is incomplete: invalid config, refused write, unreadable/skipped input, traversal limits |
 
 ## Formats for CI
 

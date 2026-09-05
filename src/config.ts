@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { readInventoryText } from "./read.js";
 import { RULES, type RuleId } from "./rules.js";
 import type { Severity } from "./types.js";
 
@@ -33,6 +34,10 @@ export const DEFAULT_CONFIG: SkillcritConfig = {
   source: null
 };
 
+function defaults(): SkillcritConfig {
+  return { ...DEFAULT_CONFIG, ignore: [...DEFAULT_CONFIG.ignore], rules: { ...DEFAULT_CONFIG.rules }, budget: { ...DEFAULT_CONFIG.budget } };
+}
+
 /**
  * Read `.skillcrit.json` from `root`, then from each ancestor up to the
  * filesystem root. First hit wins; nothing found means defaults. Unknown keys
@@ -44,17 +49,17 @@ export function loadConfig(
 ): { config: SkillcritConfig; warnings: string[] } {
   const warnings: string[] = [];
   const file = explicit ? path.resolve(explicit) : findConfig(root);
-  if (!file) return { config: { ...DEFAULT_CONFIG }, warnings };
+  if (!file) return { config: defaults(), warnings };
   if (!fs.existsSync(file)) {
     warnings.push(`config not found: ${file}`);
-    return { config: { ...DEFAULT_CONFIG }, warnings };
+    return { config: defaults(), warnings };
   }
   let raw: unknown;
   try {
-    raw = JSON.parse(fs.readFileSync(file, "utf8"));
+    raw = JSON.parse(readInventoryText(file));
   } catch (err) {
     warnings.push(`config is not valid JSON (${file}): ${String(err)}`);
-    return { config: { ...DEFAULT_CONFIG }, warnings };
+    return { config: defaults(), warnings };
   }
   return { config: applyConfig(raw, file, warnings), warnings };
 }
@@ -95,17 +100,18 @@ function applyConfig(
     if (!KNOWN_KEYS.has(key)) warnings.push(`unknown config key "${key}" in ${file}`);
   }
   if (Array.isArray(obj.ignore)) {
+    if (obj.ignore.some(v => typeof v !== "string")) warnings.push(`config "ignore" must contain only strings (${file})`);
     config.ignore = obj.ignore.filter((v): v is string => typeof v === "string");
   } else if (obj.ignore !== undefined) {
     warnings.push(`config "ignore" must be an array of strings (${file})`);
   }
   if (obj.rules && typeof obj.rules === "object" && !Array.isArray(obj.rules)) {
     for (const [id, value] of Object.entries(obj.rules as Record<string, unknown>)) {
-      if (!(id in RULES)) {
+      if (!Object.hasOwn(RULES, id)) {
         warnings.push(`unknown rule id "${id}" in ${file}`);
         continue;
       }
-      if (value !== "off" && !SEVERITIES.has(String(value))) {
+      if (typeof value !== "string" || (value !== "off" && !SEVERITIES.has(value))) {
         warnings.push(`rule "${id}" must be error, warning, info or off (${file})`);
         continue;
       }
@@ -116,11 +122,17 @@ function applyConfig(
   }
   if (obj.budget && typeof obj.budget === "object" && !Array.isArray(obj.budget)) {
     const budget = obj.budget as Record<string, unknown>;
-    if (typeof budget.alwaysOnTokens === "number") {
-      config.budget.alwaysOnTokens = budget.alwaysOnTokens;
+    for (const [key, value] of Object.entries(budget)) {
+      if (key !== "alwaysOnTokens" && key !== "bodyTokens" && key !== "bodyLines") {
+        warnings.push(`unknown budget key "${key}" in ${file}`);
+      } else if (key === "alwaysOnTokens" && value === null) {
+        config.budget.alwaysOnTokens = null;
+      } else if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+        warnings.push(`budget "${key}" must be a non-negative safe integer (${file})`);
+      } else {
+        config.budget[key] = value;
+      }
     }
-    if (typeof budget.bodyTokens === "number") config.budget.bodyTokens = budget.bodyTokens;
-    if (typeof budget.bodyLines === "number") config.budget.bodyLines = budget.bodyLines;
   } else if (obj.budget !== undefined) {
     warnings.push(`config "budget" must be an object (${file})`);
   }
@@ -153,6 +165,16 @@ export function matchesIgnore(file: string, patterns: string[]): boolean {
   if (patterns.length === 0) return false;
   const target = file.replace(/\\/g, "/").toLowerCase();
   return patterns.some((pattern) => globToRegExp(pattern).test(target));
+}
+
+/** Only a subtree glob permits pruning; a file glob must not hide siblings. */
+export function matchesIgnoredDirectory(dir: string, patterns: string[]): boolean {
+  return patterns.some(pattern => {
+    const normalized = pattern.replace(/\\/g, "/");
+    if (normalized === "**") return true;
+    if (!normalized.endsWith("/**")) return false;
+    return matchesIgnore(dir, [normalized, normalized.slice(0, -3)]);
+  });
 }
 
 const globCache = new Map<string, RegExp>();

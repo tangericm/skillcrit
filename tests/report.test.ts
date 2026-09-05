@@ -88,6 +88,32 @@ describe("output formats", () => {
     }
   });
 
+  it("exports located SARIF alerts and preserves aggregate budget findings as run metadata", () => {
+    const config = { ...DEFAULT_CONFIG, budget: { ...DEFAULT_CONFIG.budget, alwaysOnTokens: 0 } };
+    const budgetReport = lint(scan(estate), config, estate);
+    const aggregates = budgetReport.findings.filter(f => !f.file);
+    expect(aggregates.some(f => f.id === "SC2004" && f.severity === "warning")).toBe(true);
+    const run = JSON.parse(formatSarif(budgetReport)).runs[0];
+    expect(run.results).toHaveLength(budgetReport.findings.length - aggregates.length);
+    expect(run.results.length).toBeGreaterThan(0);
+    for (const result of run.results) {
+      expect(result.locations).toHaveLength(1);
+      expect(result.locations[0].physicalLocation.artifactLocation.uri).toBeTruthy();
+    }
+    expect(run.properties.aggregateFindings).toEqual(aggregates);
+  });
+
+  it("handles inventories with only aggregate findings without inventing file locations", () => {
+    const empty = lint([]);
+    empty.coverage = { complete: false, reasons: ["unreadable root"] };
+    const run = JSON.parse(formatSarif(empty)).runs[0];
+    expect(run.results).toEqual([]);
+    expect(run.properties.aggregateFindings).toEqual(empty.findings);
+    expect(run.properties.coverage).toEqual(empty.coverage);
+    expect(run.invocations[0].executionSuccessful).toBe(false);
+    expect(run.invocations[0].toolExecutionNotifications[0].message.text).toBe("unreadable root");
+  });
+
   it("escapes GitHub property delimiters and cannot inject annotation lines through paths", () => {
     const file = path.join(estate, "odd,name:100%\r\n::error::injected", "SKILL.md");
     const special = { ...report, root: estate, findings: [{ ...report.findings[0], file }] };

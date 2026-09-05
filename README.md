@@ -19,8 +19,8 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Private preview:** v0.5.0 is not published to npm yet. Repository access is
-required. From an existing checkout, build and audit the project you choose:
+**Development preview:** `0.5.1-dev.0` is not published to npm yet. Build the
+current checkout and audit the project you choose:
 
 ```bash
 npm ci
@@ -60,7 +60,7 @@ and risk signals across all scanned copies. The example above is abbreviated.
 
 ## Install
 
-For this private preview, build the checkout as above. To put that build on
+For this development preview, build the checkout as above. To put that build on
 PATH, run `npm install -g .` from the built checkout and verify
 `skillcrit --version`. The plugin and agent-skill routes below require repository
 access and that separately installed CLI.
@@ -74,7 +74,7 @@ npm i -g skillcrit
 **Let your agent run it** — installs `skills/skillcrit` as an agent skill:
 
 ```bash
-# First install the CLI from the built checkout (private preview).
+# First install the CLI from the built checkout (development preview).
 skillcrit --version
 npx skills add tangericm/skillcrit
 ```
@@ -82,7 +82,7 @@ npx skills add tangericm/skillcrit
 **As a Claude Code plugin** — skill plus marketplace entry:
 
 ```bash
-# First install the CLI from the built checkout (private preview).
+# First install the CLI from the built checkout (development preview).
 skillcrit --version
 claude plugin marketplace add tangericm/skillcrit
 claude plugin install skillcrit@skillcrit
@@ -110,7 +110,7 @@ the audit commands themselves make no network requests.
 | --- | --- |
 | `skillcrit doctor [path]` | Cleanup recommendations, estimated costs, risks across all scanned copies |
 | `skillcrit lint [path]` | Every finding, with rule ID, `file:line` and a fix |
-| `skillcrit lint [path] --fix` | Dry-run keep/orphan markdown — never deletes anything |
+| `skillcrit lint [path] --fix` | Dry-run candidate/alternative review plan — never deletes anything |
 | `skillcrit scan [path]` | Flat inventory of every SKILL.md found |
 | `skillcrit roots [path]` | Every skill directory the supported clients read, and whether it exists |
 | `skillcrit rules` | The rule catalogue with severities and remediations |
@@ -127,9 +127,26 @@ Exit codes:
 | 0 | Clean, or only findings below the gate |
 | 1 | Findings at or above `--fail-on` (default `warning`) |
 | 2 | Bad usage — unknown command, flag, or flag value |
-| 3 | skillcrit could not run: missing config, refused write, unreadable root |
+| 3 | Run failed or coverage is incomplete: invalid config, refused write, missing/unreadable root, skipped input or traversal limit |
 
 Exit 1 is a result, not a crash.
+
+Targets must be existing directories; a `SKILL.md` file is not a directory target.
+Invalid configuration fails the run whether found automatically or selected with
+`--config`. Budgets must be non-negative safe integers (`alwaysOnTokens` may be
+`null`); invalid entries and unknown nested keys are rejected, not ignored.
+
+Scan, doctor and lint JSON include `coverage: { complete, reasons }`. A partial
+inventory still includes inspected results, but exits **3**, even with
+`--fail-on error`. SARIF records unsuccessful execution and coverage reasons;
+other formats show an incomplete-scan warning. `lint --fix` does not write a
+cleanup plan from incomplete input.
+
+Library callers: `scan()` throws on invalid targets or incomplete coverage by
+default. Supply `onTruncated(reason)` to explicitly receive partial results and
+every coverage reason. `scanRisks()` likewise accepts an optional fourth-argument
+callback for partial script inventory. Neither callback makes partial results
+complete; callers must carry that status into their own reports.
 
 ## How cleanup recommendations are chosen
 
@@ -155,19 +172,51 @@ Doctor JSON exposes `runtimeResolution: "unknown"`, `limitations`, and
 
 ## Output formats
 
-`--format text` (default), `json`, `markdown`, `sarif`, `github`.
+`lint` supports `--format text` (default), `json`, `markdown`, `sarif`, `github`.
+Other commands support only `text` and `json`; unsupported formats exit 2.
+`--fix` requires `lint` with text output.
+
+Trigger overlap is a phrase-matching heuristic, not measured contention. Clusters
+above 20 members get one summary with no pairwise details or cleanup ranking.
+Client-specific frontmatter controls are portability notes: preserve fields that
+the target client supports rather than moving operational controls into metadata.
+
+After npm publication, install a reviewed version in the repository you want
+to audit with `npm install --save-dev --save-exact skillcrit@<version>` and commit
+the package files. The workflow below uses that locally installed CLI. During
+the preview, a supplied, verified tarball can be used instead; the package is
+not yet available from the public npm registry.
 
 ```yaml
-# Annotate the diff, then gate separately, so a red job says which one failed.
-- run: npx skillcrit lint . --format github || [ $? -eq 1 ]
-- run: npx skillcrit lint . --format sarif > skillcrit.sarif || [ $? -eq 1 ]
-- uses: github/codeql-action/upload-sarif@v3
-  with: { sarif_file: skillcrit.sarif }
-- run: node dist/cli.js lint . --fail-on error
+name: audit skills
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      # Exit 1 means findings; usage and incomplete-scan errors still fail.
+      - run: ./node_modules/.bin/skillcrit lint . --format github || [ $? -eq 1 ]
+      - run: ./node_modules/.bin/skillcrit lint . --fail-on error
 ```
 
+For code scanning, additionally generate SARIF with the same installed CLI and
+upload it using `github/codeql-action/upload-sarif@v4`; that job needs
+`security-events: write` and code scanning enabled for the repository.
+
 `github` prints workflow-command annotations, so findings land on the diff.
-`sarif` is SARIF 2.1.0 and uploads to code scanning.
+`sarif` is SARIF 2.1.0 and uploads file-level findings to code scanning.
+Inventory-wide findings, such as the estimated token total, are retained in
+`runs[].properties.aggregateFindings` because GitHub requires a source location
+for each displayed alert. These findings still appear in other report formats
+and count toward the CLI exit-code gate.
 
 ## Configuration
 
@@ -181,6 +230,16 @@ Optional `.skillcrit.json`, found by walking up from the scanned path:
   "failOn": "error"
 }
 ```
+
+Subtree ignores such as `**/vendor/**` prune the directory before it consumes
+scan limits, including bundled-script limits. File-specific patterns filter
+matching skill files or scripts without hiding other files in their directory.
+
+Lint JSON includes `runtimeResolution: "unknown"` and `limitations`, matching
+doctor's explicit runtime boundary. Legacy token fields such as `alwaysOnNow`
+and `afterCleanup` remain estimates for hypothetical sets. Informational
+portability notes appear separately from spec findings in cleanup markdown;
+neither category establishes that a skill should be deleted.
 
 Rule IDs are stable: `SC1xxx` spec conformance, `SC2xxx` context budget,
 `SC3xxx` collisions, `SC4xxx` risk inventory. An ID never changes meaning; a

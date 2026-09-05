@@ -2,7 +2,8 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
-import { DEFAULT_CONFIG, matchesIgnore, type SkillcritConfig } from "./config.js";
+import { readInventoryText } from "./read.js";
+import { DEFAULT_CONFIG, matchesIgnore, matchesIgnoredDirectory, type SkillcritConfig } from "./config.js";
 import { detectOrigin } from "./origin.js";
 import { collectRoots } from "./roots.js";
 import { RULES, type RuleId } from "./rules.js";
@@ -38,7 +39,7 @@ const NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 /**
  * Frontmatter keys the Agent Skills specification defines. Anything else is
- * reported as SC1010 so client-specific keys move under `metadata:`.
+ * reported as a portability note, not a recommendation to rewrite client controls.
  */
 const SPEC_KEYS = new Set([
   "name",
@@ -68,34 +69,54 @@ export type ScanOptions = {
   maxDepth?: number;
   maxDirs?: number;
   onProgress?: (n: number) => void;
-  /** Called once if a walk bound cut the scan short, so callers can say so. */
+  /** Receives incomplete-coverage reasons. Without a callback, partial scans throw. */
   onTruncated?: (reason: string) => void;
 };
 
 export function scan(root: string, options: ScanOptions = {}): SkillRecord[] {
+  if (!fs.statSync(root).isDirectory()) throw new Error(`scan target must be a directory: ${root}`);
+  for (const extra of options.extraRoots ?? []) {
+    if (!fs.statSync(extra).isDirectory()) throw new Error(`scan target must be a directory: ${extra}`);
+  }
+  for (const value of [options.maxDirs, options.maxDepth]) {
+    if (value !== undefined && (!Number.isSafeInteger(value) || value < 0)) {
+      throw new Error("scan bounds must be non-negative safe integers");
+    }
+  }
   const config = options.config ?? DEFAULT_CONFIG;
   const files = new Map<string, string>();
   const seenReal = new Set<string>();
   const budget = {
     dirs: options.maxDirs ?? MAX_WALK_DIRS,
     depth: options.maxDepth ?? MAX_WALK_DEPTH,
-    truncated: ""
+    limit: options.maxDirs ?? MAX_WALK_DIRS,
+    reasons: new Set<string>()
   };
   let n = 0;
   for (const dir of collectRoots(root, options.extraRoots ?? [], options.user)) {
-    walkSkillFiles(dir, files, dir, seenReal, budget, 0, () => {
+    walkSkillFiles(dir, files, dir, seenReal, budget, config.ignore, 0, () => {
       n += 1;
       options.onProgress?.(n);
     });
   }
-  if (budget.truncated) options.onTruncated?.(budget.truncated);
-  return [...files.entries()]
-    .filter(([file]) => !matchesIgnore(file, config.ignore))
-    .map(([file, walkRoot]) => parseSkill(file, walkRoot, config, options.risks !== false))
-    .sort((a, b) => a.skillFile.localeCompare(b.skillFile));
+  const records: SkillRecord[] = [];
+  const incomplete = (reason: string) => { budget.reasons.add(reason); };
+  for (const [file, walkRoot] of files) {
+    if (matchesIgnore(file, config.ignore)) continue;
+    try {
+      records.push(parseSkill(file, walkRoot, config, options.risks !== false, incomplete));
+    } catch (err) {
+      incomplete(`could not inspect ${file}: ${String(err)}`);
+    }
+  }
+  if (budget.reasons.size && !options.onTruncated) {
+    throw new Error(`incomplete scan: ${[...budget.reasons].join("; ")}`);
+  }
+  for (const reason of budget.reasons) options.onTruncated?.(reason);
+  return records.sort((a, b) => a.skillFile.localeCompare(b.skillFile));
 }
 
-type WalkBudget = { dirs: number; depth: number; truncated: string };
+type WalkBudget = { dirs: number; limit: number; depth: number; reasons: Set<string> };
 
 function walkSkillFiles(
   dir: string,
@@ -103,61 +124,68 @@ function walkSkillFiles(
   walkRoot: string,
   seenReal: Set<string>,
   budget: WalkBudget,
+  ignore: string[],
   depth: number,
   onFile: () => void
 ): void {
-  if (depth > budget.depth) {
-    budget.truncated ||= `walk stopped at depth ${budget.depth} under ${walkRoot}`;
-    return;
-  }
-  if (budget.dirs <= 0) {
-    budget.truncated ||= `walk stopped after ${MAX_WALK_DIRS} directories`;
-    return;
-  }
+  if (matchesIgnoredDirectory(dir, ignore)) return;
   let real: string;
   try {
     if (!fs.existsSync(dir)) return;
     real = fs.realpathSync(dir);
   } catch {
+    budget.reasons.add(`could not resolve directory: ${dir}`);
     return;
   }
+  if (matchesIgnoredDirectory(real, ignore)) return;
   let stat: fs.Stats;
   try {
     stat = fs.statSync(real);
   } catch {
+    budget.reasons.add(`could not inspect directory: ${dir}`);
     return;
   }
   if (!stat.isDirectory()) return;
   if (!isInsideRoot(real, walkRoot)) return;
   if (seenReal.has(real)) return;
+  if (depth > budget.depth) {
+    budget.reasons.add(`walk stopped at depth ${budget.depth} under ${walkRoot}`);
+    return;
+  }
+  if (budget.dirs <= 0) {
+    budget.reasons.add(`walk stopped after ${budget.limit} directories`);
+    return;
+  }
   seenReal.add(real);
   budget.dirs -= 1;
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(real, { withFileTypes: true });
   } catch {
+    budget.reasons.add(`could not read directory: ${dir}`);
     return;
   }
   for (const entry of entries) {
     const full = path.join(real, entry.name);
     if (SKIP_DIRS.has(entry.name)) continue;
     if (entry.name === "SKILL.md") {
+      if (matchesIgnore(full, ignore)) continue;
       try {
-        if (
-          isInsideRoot(full, walkRoot) &&
-          fs.statSync(full).isFile() &&
-          !out.has(full)
-        ) {
+        const resolved = fs.realpathSync(full);
+        if (!isInsideRoot(resolved, walkRoot)) continue;
+        if (!fs.statSync(resolved).isFile()) {
+          budget.reasons.add(`skill is not a regular file: ${full}`);
+        } else if (!out.has(full)) {
           out.set(full, walkRoot);
           onFile();
         }
       } catch {
-        // unreadable
+        budget.reasons.add(`could not inspect skill file: ${full}`);
       }
       continue;
     }
     if (entry.isDirectory() || entry.isSymbolicLink()) {
-      walkSkillFiles(full, out, walkRoot, seenReal, budget, depth + 1, onFile);
+      walkSkillFiles(full, out, walkRoot, seenReal, budget, ignore, depth + 1, onFile);
     }
   }
 }
@@ -203,8 +231,19 @@ const MATTER_OPTIONS = { language: "yaml" } as const;
  * noise via the `repaired` flag.
  */
 function parseFrontmatter(raw: string): Parsed {
+  raw = raw.replace(/^\uFEFF/, "");
+  // Input must never select a gray-matter engine. Its default language is
+  // overridable by `---js`, so validate the grammar before BOTH parse paths.
+  if (!raw.startsWith("---")) {
+    return { data: {}, content: raw, repaired: false, failed: false };
+  }
+  const lines = raw.split(/\r?\n/);
+  if (lines[0] !== "---" || !lines.slice(1).includes("---")) {
+    return { data: {}, content: raw, repaired: false, failed: true };
+  }
   try {
     const parsed = matter(raw, MATTER_OPTIONS);
+    if (!isMapping(parsed.data)) throw new Error("frontmatter must be a mapping");
     return {
       data: parsed.data as Record<string, unknown>,
       content: parsed.content,
@@ -218,6 +257,7 @@ function parseFrontmatter(raw: string): Parsed {
   if (repaired !== raw) {
     try {
       const parsed = matter(repaired, MATTER_OPTIONS);
+      if (!isMapping(parsed.data)) throw new Error("frontmatter must be a mapping");
       return {
         data: parsed.data as Record<string, unknown>,
         content: parsed.content,
@@ -229,6 +269,10 @@ function parseFrontmatter(raw: string): Parsed {
     }
   }
   return { data: {}, content: bodyAfterFrontmatter(raw), repaired: false, failed: true };
+}
+
+function isMapping(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function quoteColonValues(raw: string): string {
@@ -257,22 +301,23 @@ function parseSkill(
   skillFile: string,
   walkRoot: string,
   config: SkillcritConfig,
-  withRisks: boolean
+  withRisks: boolean,
+  incomplete: (reason: string) => void
 ): SkillRecord {
-  const raw = fs.readFileSync(skillFile, "utf8");
+  const raw = readInventoryText(skillFile);
   const parsed = parseFrontmatter(raw);
   const data = parsed.data;
-  const name = String(data.name ?? "");
-  const description = String(data.description ?? "").trim();
+  const name = typeof data.name === "string" ? data.name : "";
+  const description = typeof data.description === "string" ? data.description.trim() : "";
   const body = parsed.content.trim();
   const skillDir = path.dirname(skillFile);
   const folder = path.basename(skillDir);
-  const packRoot = findPackRoot(skillDir, walkRoot);
-  const pack = packRoot ? packName(packRoot) : null;
-  const version = readVersion(data, packRoot, skillFile);
+  const packRoot = findPackRoot(skillDir, walkRoot, incomplete);
+  const pack = packRoot ? packName(packRoot, incomplete) : null;
+  const version = readVersion(data, packRoot, skillFile, incomplete);
   const origin = detectOrigin(skillFile);
-  const commands = packRoot ? listCommands(packRoot) : [];
-  const hooks = packRoot ? packHasHooks(packRoot) : false;
+  const commands = packRoot ? listCommands(packRoot, incomplete) : [];
+  const hooks = packRoot ? packHasHooks(packRoot, incomplete) : false;
   const alwaysOn = hooks || ALWAYS_ON_BODY.test(body);
   const descriptionTokens = estimateTokens(description);
   const bodyTokens = estimateTokens(body);
@@ -289,7 +334,7 @@ function parseSkill(
     config
   });
   const risks = withRisks
-    ? collectRisks(skillDir, body, data, bodyLineOffset(raw, body))
+    ? collectRisks(skillDir, body, data, bodyLineOffset(raw, body), incomplete, config.ignore)
     : [];
 
   return {
@@ -333,9 +378,11 @@ function collectRisks(
   skillDir: string,
   body: string,
   data: Record<string, unknown>,
-  offset: number
+  offset: number,
+  incomplete: (reason: string) => void,
+  ignore: string[]
 ): RiskFinding[] {
-  const risks = scanRisks(skillDir, body, offset);
+  const risks = scanRisks(skillDir, body, offset, incomplete, ignore);
   const allowed = data["allowed-tools"];
   if (typeof allowed === "string") {
     const broad = allowedToolsRisk(allowed);
@@ -370,7 +417,7 @@ function specFindingsFor(input: SpecInput): SpecFinding[] {
     return out;
   }
 
-  if (!input.name) add("SC1001", "name", "missing name");
+  if (!input.name) add("SC1001", "name", input.data.name === undefined ? "missing name" : "name must be a non-empty string");
   else {
     if (input.name !== input.folder) {
       add(
@@ -389,7 +436,7 @@ function specFindingsFor(input: SpecInput): SpecFinding[] {
     }
   }
 
-  if (!input.description) add("SC1005", "description", "missing description");
+  if (!input.description) add("SC1005", "description", input.data.description === undefined ? "missing description" : "description must be a non-empty string");
   else {
     if (input.description.length > 1024) {
       add("SC1006", "description", "description longer than 1024 characters");
@@ -404,6 +451,11 @@ function specFindingsFor(input: SpecInput): SpecFinding[] {
   }
 
   const compatibility = input.data.compatibility;
+  for (const field of ["license", "compatibility"]) {
+    if (input.data[field] !== undefined && typeof input.data[field] !== "string") {
+      add("SC1013", field, `${field} must be a string`);
+    }
+  }
   if (typeof compatibility === "string" && compatibility.length > 500) {
     add("SC1007", "compatibility", "compatibility longer than 500 characters");
   }
@@ -477,14 +529,14 @@ function fieldLine(raw: string, field: string): number | null {
   return null;
 }
 
-function findPackRoot(start: string, stopAt: string): string | null {
+function findPackRoot(start: string, stopAt: string, incomplete: (reason: string) => void): string | null {
   const stop = path.resolve(stopAt);
   let dir = path.resolve(start);
   for (let i = 0; i < 16; i++) {
     if (PLUGIN_MANIFESTS.some((rel) => fs.existsSync(path.join(dir, rel)))) {
       return dir;
     }
-    if (isAgentPluginRoot(dir)) return dir;
+    if (isAgentPluginRoot(dir, incomplete)) return dir;
     if (dir === stop) break;
     const parent = path.dirname(dir);
     if (parent === dir) break;
@@ -498,14 +550,22 @@ function findPackRoot(start: string, stopAt: string): string | null {
  * a `name`. The check reads the file rather than trusting the filename, since
  * `plugin.json` is a common name in unrelated tooling.
  */
-function isAgentPluginRoot(dir: string): boolean {
+function isAgentPluginRoot(dir: string, incomplete: (reason: string) => void): boolean {
   const file = path.join(dir, ROOT_MANIFEST);
-  if (!fs.existsSync(file)) return false;
+  const json = readManifest(file, dir, incomplete);
+  return typeof json?.name === "string" && json.name.length > 0;
+}
+
+function readManifest(file: string, root: string, incomplete: (reason: string) => void): Record<string, unknown> | null {
+  if (!fs.existsSync(file)) return null;
   try {
-    const json = JSON.parse(fs.readFileSync(file, "utf8")) as { name?: unknown };
-    return typeof json.name === "string" && json.name.length > 0;
+    if (!isInsideRoot(file, root)) throw new Error("metadata leaves package root");
+    const json: unknown = JSON.parse(readInventoryText(file));
+    if (!isMapping(json)) throw new Error("metadata must be an object");
+    return json;
   } catch {
-    return false;
+    incomplete(`could not read metadata object within package and size limits: ${file}`);
+    return null;
   }
 }
 
@@ -513,15 +573,10 @@ function manifestFiles(packRoot: string): string[] {
   return [...PLUGIN_MANIFESTS, ROOT_MANIFEST].map((rel) => path.join(packRoot, rel));
 }
 
-function packName(packRoot: string): string {
+function packName(packRoot: string, incomplete: (reason: string) => void): string {
   for (const file of manifestFiles(packRoot)) {
-    if (!fs.existsSync(file)) continue;
-    try {
-      const json = JSON.parse(fs.readFileSync(file, "utf8")) as { name?: string };
-      if (json.name) return json.name;
-    } catch {
-      // fall through to directory name
-    }
+    const json = readManifest(file, packRoot, incomplete);
+    if (typeof json?.name === "string" && json.name) return json.name;
   }
   return path.basename(packRoot);
 }
@@ -529,7 +584,8 @@ function packName(packRoot: string): string {
 function readVersion(
   data: Record<string, unknown>,
   packRoot: string | null,
-  skillFile: string
+  skillFile: string,
+  incomplete: (reason: string) => void
 ): string | null {
   const meta = data.metadata;
   if (meta && typeof meta === "object" && meta !== null) {
@@ -540,31 +596,9 @@ function readVersion(
     if (typeof v === "string" && v.trim()) return v.trim();
   }
   if (packRoot) {
-    for (const file of manifestFiles(packRoot)) {
-      if (!fs.existsSync(file)) continue;
-      try {
-        const json = JSON.parse(fs.readFileSync(file, "utf8")) as {
-          version?: unknown;
-        };
-        if (json.version != null && String(json.version).trim()) {
-          return String(json.version).trim();
-        }
-      } catch {
-        // keep looking
-      }
-    }
-    const pkg = path.join(packRoot, "package.json");
-    if (fs.existsSync(pkg)) {
-      try {
-        const json = JSON.parse(fs.readFileSync(pkg, "utf8")) as {
-          version?: unknown;
-        };
-        if (json.version != null && String(json.version).trim()) {
-          return String(json.version).trim();
-        }
-      } catch {
-        // ignore
-      }
+    for (const file of [...manifestFiles(packRoot), path.join(packRoot, "package.json")]) {
+      const json = readManifest(file, packRoot, incomplete);
+      if (typeof json?.version === "string" && json.version.trim()) return json.version.trim();
     }
   }
   const fromPath = skillFile
@@ -573,26 +607,23 @@ function readVersion(
   return fromPath ? fromPath[1] : null;
 }
 
-function listCommands(packRoot: string): string[] {
+function listCommands(packRoot: string, incomplete: (reason: string) => void): string[] {
   const dir = path.join(packRoot, "commands");
   if (!fs.existsSync(dir)) return [];
-  return fs
-    .readdirSync(dir)
-    .filter((name) => name.endsWith(".md"))
-    .map((name) => name.replace(/\.md$/, ""));
+  try {
+    return fs.readdirSync(dir, { withFileTypes: true })
+      .filter(entry => entry.isFile() && entry.name.endsWith(".md"))
+      .map(entry => entry.name.replace(/\.md$/, ""));
+  } catch {
+    incomplete(`could not read commands directory: ${dir}`);
+    return [];
+  }
 }
 
-function packHasHooks(packRoot: string): boolean {
+function packHasHooks(packRoot: string, incomplete: (reason: string) => void): boolean {
   for (const file of manifestFiles(packRoot)) {
-    if (!fs.existsSync(file)) continue;
-    try {
-      const json = JSON.parse(fs.readFileSync(file, "utf8")) as { hooks?: unknown };
-      if (json.hooks && Object.keys(json.hooks as object).length > 0) {
-        return true;
-      }
-    } catch {
-      return false;
-    }
+    const json = readManifest(file, packRoot, incomplete);
+    if (isMapping(json?.hooks) && Object.keys(json.hooks).length > 0) return true;
   }
   return false;
 }

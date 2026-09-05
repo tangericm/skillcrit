@@ -23,22 +23,24 @@ function rec(
 }
 
 describe("cleanup markdown", () => {
-  it("lists the super directory and orphan copies for duplicates", () => {
+  it("lists the preferred directory and alternatives for duplicate review", () => {
     const keep = rec("csv-transform", "/tmp/live", {
       origin: "project",
       version: "2.0.0",
-      body: "same"
+      body: "same",
+      hash: "same-skill-file"
     });
     const orphan = rec("csv-transform", "/tmp/old-copy", {
       origin: "user",
       version: "2.0.0",
-      body: "same"
+      body: "same",
+      hash: "same-skill-file"
     });
     const md = cleanupPlan(lint([keep, orphan]));
     expect(md).toMatch(/^# skillcrit cleanup/m);
     expect(md).toMatch(/dry-run/i);
     expect(md).toMatch(/\*\*Keep\*\*/);
-    expect(md).toMatch(/\*\*Orphans\*\*/);
+    expect(md).toMatch(/\*\*Alternatives\*\*/);
     expect(md).toMatch(/\/tmp\/live/);
     expect(md).toMatch(/\/tmp\/old-copy/);
     expect(md).toMatch(/project/);
@@ -72,9 +74,9 @@ describe("cleanup markdown", () => {
     expect(md).toMatch(/older|@1\.0\.0/);
   });
 
-  it("lists spec-error skill directories as orphans to review", () => {
+  it("lists spec findings with their severity for review", () => {
     const md = cleanupPlan(lint(scan(stacked)));
-    expect(md).toMatch(/## Spec errors/);
+    expect(md).toMatch(/## Spec findings to review/);
     expect(md).toMatch(/bad-name/);
   });
 
@@ -86,7 +88,7 @@ describe("cleanup markdown", () => {
     const result = await runCli(["lint", stacked, "--fix", "--out", out]);
     expect(result.status).toBe(1);
     expect(fs.readFileSync(out, "utf8")).toMatch(/\*\*Keep\*\*/);
-    expect(fs.readFileSync(out, "utf8")).toMatch(/\*\*Orphans\*\*/);
+    expect(fs.readFileSync(out, "utf8")).toMatch(/\*\*Alternatives\*\*/);
     expect(fs.readFileSync(pkg, "utf8")).toBe('{"name":"app"}\n');
 
     // A refused write is a run failure (exit 3), reported on stderr — not a
