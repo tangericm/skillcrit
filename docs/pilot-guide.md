@@ -4,25 +4,25 @@ The pilot tests whether Skillcrit helps people maintain their real skill
 collections. Start with a project you know well. A useful outcome can be a
 confirmed issue, a clearer explanation, or evidence that the tool adds no value.
 
-Candidate: **`0.5.1-rc.1`**, distributed through the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.1).
+Candidate: **`0.5.1-rc.2`**, distributed through the
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
 It is a prerelease, and npm registry publication is a separate step. Do not
 substitute the old unpatched `0.5.0` build.
 
 ## Install in a disposable directory
 
-Requires Node 22+ and npm. Download `skillcrit-0.5.1-rc.1.tgz` and `SHA256SUMS`
+Requires Node 22+ and npm. Download `skillcrit-0.5.1-rc.2.tgz` and `SHA256SUMS`
 from the same prerelease into a new empty folder. In that folder, verify the
 archive before installing:
 
 ```bash
-node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.5.1-rc.1.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
+node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.5.1-rc.2.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
 npm init -y
-npm install --save-dev --save-exact ./skillcrit-0.5.1-rc.1.tgz --ignore-scripts
+npm install --save-dev --save-exact ./skillcrit-0.5.1-rc.2.tgz --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 ```
 
-The version must be `skillcrit 0.5.1-rc.1`. These commands work in a POSIX shell
+The version must be `skillcrit 0.5.1-rc.2`. These commands work in a POSIX shell
 and PowerShell. Installation downloads npm dependencies. The audit itself
 makes no network requests and needs no API key.
 
@@ -54,7 +54,7 @@ client loads. An explicitly ignored directory is outside the requested scan.
 
 ## Repeat the automated simulations
 
-The installed candidate includes 13 controlled scenarios:
+The installed candidate includes 16 controlled scenarios:
 
 ```bash
 node ./node_modules/skillcrit/scripts/simulate.mjs
@@ -64,7 +64,8 @@ The script creates and removes its own temporary fixtures, invokes the installed
 CLI, checks results and exit codes, and verifies the fixture files remain
 unchanged. It covers three client directory layouts, duplicate scripts,
 permission variants, supported controls, ignored/deep trees, invalid config,
-JavaScript frontmatter, oversized inputs, SARIF, and invalid commands.
+JavaScript frontmatter, oversized inputs, SARIF, invalid commands, and large
+piped reports with complete and incomplete coverage.
 It exits nonzero if any scenario fails. This is a functional simulation, not
 evidence of external user satisfaction or broad agent performance.
 
@@ -114,6 +115,8 @@ Unexpected code execution or writes, a false complete-coverage claim, or advice
 that breaks a valid client control stops promotion until reproduced and fixed.
 Installation blockers and misleading findings must be triaged before promotion.
 
-**Current status:** pilot kit prepared; no external participants or second-session
-results recorded. Native smoke tests and automated fixtures do not count as
-participant feedback.
+**Current status:** maintainer checks on two real installed packs, native client
+trials, and a repeatable simulation kit are recorded in the
+[RC2 verification record](verification/0.5.1-rc.2.md). No external participants or
+voluntary second-session results are recorded. Maintainer trials do not count
+as participant feedback.

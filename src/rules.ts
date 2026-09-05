@@ -235,10 +235,10 @@ export const RULES: Record<RuleId, RuleSpec> = {
   },
   SC4005: {
     id: "SC4005",
-    title: "unpinned dependency install",
+    title: "dependency install without a visible version pin",
     severity: "info",
     remediation:
-      "Pin the version so a later publish of the package cannot change what the skill runs."
+      "Check referenced requirements and lockfiles first. Pin versions where resolution is not already fixed; this text match does not inspect dependency resolution."
   },
   SC4006: {
     id: "SC4006",

@@ -2,7 +2,7 @@
   "name": "skillcrit",
   "displayName": "skillcrit",
   "description": "Audit installed agent skills, conflicts, and context costs.",
-  "version": "0.5.1-rc.1",
+  "version": "0.5.1-rc.2",
   "author": { "name": "Eric Tang" },
   "icon": "./docs/icon.png",
   "keywords": ["agent-skills", "agentskills", "lint", "eval", "audit", "context"],

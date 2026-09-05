@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1-rc.2 (pilot release candidate)
+
+- Flush pending report output before exiting. Large piped JSON reports could
+  be truncated in rc.1; regression cases cover audit exit codes 0, 1, and 3.
+- Expand the shipped simulations from 13 to 16 scenarios.
+- Correct CLI help: doctor exit 0 means completed coverage, and installation
+  guidance links to the current release status instead of an unavailable npm package.
+- Clarify SC4005: a command that reads requirements may already resolve pinned
+  versions; the text match does not inspect dependency resolution.
+- Record independent inventories of two real installed packs and native
+  activation/namespace checks. Keep external adoption and stable promotion open.
+
 ## 0.5.1-rc.1 (pilot release candidate)
 
 - Keep projects inside agent-managed worktrees classified as project skills;
