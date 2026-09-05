@@ -11,7 +11,8 @@ GitHub releases, and npm publication are separate operations; verify each one.
 2. Update the changelog and installation status. Keep the CLI prerequisite and
    runtime limitations explicit in the README and bundled skill.
 3. Run `npm ci`, `npm run build`, `npm test`, `npm audit`, and
-   `node dist/cli.js lint . --fail-on error`. Investigate failures before release.
+   `node dist/cli.js lint . --fail-on error`, and `npm run verify:package` from
+   a clean source checkout. Investigate failures before release.
 4. Complete the six OS/Node CI combinations and successful SARIF ingestion for
    the exact candidate. Obtain an independent review and merge the PR.
 5. Repeat relevant native checks from [compatibility](compatibility.md). Record
@@ -37,7 +38,7 @@ Install the archive in a different initialized project:
 
 ```bash
 npm init -y
-npm install --save-dev --save-exact /absolute/path/to/skillcrit-0.5.1-rc.2.tgz --ignore-scripts
+npm install --save-dev --save-exact /absolute/path/to/skillcrit-0.5.1-rc.3.tgz --ignore-scripts
 npm ci --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 node ./node_modules/skillcrit/dist/cli.js doctor /absolute/path/to/test-project --json
@@ -53,10 +54,10 @@ SHA-256, source commit and verification results; do not include private paths.
 
 ## GitHub prerelease
 
-Create annotated tag `v0.5.1-rc.2` at the reviewed, passing commit. Never move an
+Create annotated tag `v0.5.1-rc.3` at the reviewed, passing commit. Never move an
 existing release tag to different code. Publish a GitHub prerelease with:
 
-- `skillcrit-0.5.1-rc.2.tgz`, the exact archive tested above;
+- `skillcrit-0.5.1-rc.3.tgz`, the exact archive tested above;
 - `SHA256SUMS`, including the archive and verification report;
 - `verification.json`, with source commit, version, checks and honest limits.
 
@@ -75,12 +76,12 @@ the name can be claimed. Do not put access tokens in issues, chat, or git.
 From the directory containing the verified archive:
 
 ```bash
-npm publish ./skillcrit-0.5.1-rc.2.tgz --tag next --access public
-npm view skillcrit@0.5.1-rc.2 version dist.integrity dist-tags --json
+npm publish ./skillcrit-0.5.1-rc.3.tgz --tag next --access public
+npm view skillcrit@0.5.1-rc.3 version dist.integrity dist-tags --json
 ```
 
 Compare registry integrity with the retained package integrity. In another
-clean consumer project, install `skillcrit@0.5.1-rc.2`, repeat the version/audit
+clean consumer project, install `skillcrit@0.5.1-rc.3`, repeat the version/audit
 smoke tests, then update installation status in the README. Do not advertise a
 registry install until it succeeds. Request `next` for prereleases and inspect
 all returned tags; do not assume the registry kept `latest` absent.

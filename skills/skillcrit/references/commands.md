@@ -28,7 +28,9 @@ Every finding with a rule ID, a `file:line`, and a remediation.
 then **Alternatives** for review, numbered questions, and estimated token
 comparisons. Informational notes and spec findings are shown separately with
 their severity and remediation. It writes `skillcrit-cleanup.md` by default. `--out -` skips the
-write. `--out package.json`, `SKILL.md`, or `.env` is refused with exit 3. It
+write. Output must be a new file: existing files and links are refused with
+exit 3. Filesystems without hard-link support must use `--out -`; file export
+fails closed there. `--out package.json`, `SKILL.md`, `LICENSE`, or `.env` is also refused. It
 never deletes a skill file.
 
 ## scan

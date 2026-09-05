@@ -99,4 +99,76 @@ describe("cleanup markdown", () => {
     expect(fs.readFileSync(pkg, "utf8")).toBe('{"name":"app"}\n');
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it.each(["regular file", "hard link", "symbolic link", "dangling symbolic link"])(
+    "preserves an existing output destination that is a %s",
+    async (kind, context) => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-output-alias-"));
+      const target = path.join(dir, "package.json");
+      const out = path.join(dir, "cleanup.md");
+      const original = '{"name":"do-not-overwrite"}\n';
+      try {
+        if (kind !== "dangling symbolic link") fs.writeFileSync(target, original);
+        if (kind === "regular file") fs.writeFileSync(out, "Existing user notes\n");
+        else if (kind === "hard link") fs.linkSync(target, out);
+        else {
+          try {
+            fs.symlinkSync(target, out, "file");
+          } catch (error) {
+            if (process.platform === "win32" && (error as NodeJS.ErrnoException).code === "EPERM") {
+              context.skip("Windows file symlinks require Developer Mode or elevation");
+              return;
+            }
+            throw error;
+          }
+        }
+        const before = fs.lstatSync(out);
+        const result = await runCli(["lint", stacked, "--fix", "--out", out]);
+        expect(result.status).toBe(3);
+        expect(result.stderr).toMatch(/already exists|refusing to overwrite/i);
+        expect(fs.lstatSync(out).ino).toBe(before.ino);
+        if (kind === "dangling symbolic link") expect(fs.existsSync(target)).toBe(false);
+        else expect(fs.readFileSync(target, "utf8")).toBe(original);
+        if (kind === "regular file") expect(fs.readFileSync(out, "utf8")).toBe("Existing user notes\n");
+        if (before.isSymbolicLink()) expect(fs.readlinkSync(out)).toBe(target);
+        expect(fs.readdirSync(dir).sort()).toEqual(kind === "dangling symbolic link"
+          ? ["cleanup.md"] : ["cleanup.md", "package.json"]);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.each(["SKILL.md", "package.json", "LICENSE", ".env"])(
+    "refuses to create a protected output named %s",
+    async name => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-output-protected-"));
+      try {
+        const out = path.join(dir, name);
+        const result = await runCli(["lint", stacked, "--fix", "--out", out]);
+        expect(result.status).toBe(3);
+        expect(fs.existsSync(out)).toBe(false);
+      } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  );
+
+  it.runIf(process.platform === "win32").each([
+    "package.json:cleanup.md", "new-file:cleanup.md", "package.json.", "LICENSE ", "NUL", "CON.md"
+  ])("refuses Windows special output path %s", async name => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "skillcrit-output-windows-"));
+    try {
+      const pkg = path.join(dir, "package.json");
+      const original = '{"name":"protected-project"}\n';
+      fs.writeFileSync(pkg, original);
+      const result = await runCli(["lint", stacked, "--fix", "--out", path.join(dir, name)]);
+      expect(result.status).toBe(3);
+      expect(fs.readFileSync(pkg, "utf8")).toBe(original);
+      expect(fs.readdirSync(dir)).toEqual(["package.json"]);
+      if (name.includes(":")) expect(fs.existsSync(path.join(dir, name))).toBe(false);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });

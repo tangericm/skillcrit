@@ -92,6 +92,26 @@ try {
     const report = JSON.parse(invoke(root, ["lint", root, "--json"], 0));
     assert.ok(report.findings.some(f => f.id === "SC1010" && f.severity === "info"));
   });
+  for (const alias of [false, true]) {
+    scenario(alias ? "cleanup export preserves a hardlink alias target" : "cleanup export preserves an existing document", root => {
+      skill(root);
+      write(root, "package.json", '{"name":"protected-project"}\n');
+      if (alias) fs.linkSync(path.join(root, "package.json"), path.join(root, "cleanup.md"));
+      else write(root, "cleanup.md", "Existing user notes\n");
+    }, root => {
+      invoke(root, ["lint", root, "--fix", "--out", path.join(root, "cleanup.md")], 3);
+    });
+  }
+  scenario("cleanup export creates a private new document and refuses reuse", root => skill(root), root => {
+    const out = path.join(root, "cleanup.md");
+    invoke(root, ["lint", root, "--fix", "--out", out], 0);
+    const original = fs.readFileSync(out, "utf8");
+    assert.match(original, /^# skillcrit cleanup/);
+    if (process.platform !== "win32") assert.equal(fs.statSync(out).mode & 0o777, 0o600);
+    invoke(root, ["lint", root, "--fix", "--out", out], 3);
+    assert.equal(fs.readFileSync(out, "utf8"), original);
+    fs.unlinkSync(out);
+  });
   scenario("ignored vendor content is pruned and sibling risks remain", root => {
     skill(root, "review");
     write(root, ".skillcrit.json", JSON.stringify({ ignore: ["**/vendor/**"] }));

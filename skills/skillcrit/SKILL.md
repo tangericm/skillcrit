@@ -6,7 +6,7 @@ compatibility: Requires Node 22+ and the skillcrit CLI reachable as a process.
 metadata:
   author: Eric Tang
   repo: https://github.com/tangericm/skillcrit
-  version: "0.5.1-rc.2"
+  version: "0.5.1-rc.3"
 ---
 
 # skillcrit
@@ -46,14 +46,19 @@ the user is reading it.
 
 Skill/plugin installation provides instructions only; the CLI is a separate prerequisite.
 Run `skillcrit --version`. If missing, explain that Node 22+ and
-the CLI are required. Release candidate 0.5.1-rc.2 is available on npm as
-`skillcrit@0.5.1-rc.2`; `skillcrit@next` follows the current prerelease.
-A checksum-verified archive is also available from the GitHub prerelease.
+the CLI are required. The corrected candidate is 0.5.1-rc.3; use the
+checksum-verified archive from its GitHub prerelease until npm publication is
+confirmed. Do not substitute an older registry build for file-export testing.
 With an authorized source checkout, build it using `npm ci` and `npm run build`,
 then use its `dist/cli.js` directly or install it with `npm install -g .`.
-Alternatively, install `npm i -g skillcrit@0.5.1-rc.2`. Obtain approval before
+Alternatively, install the verified `.tgz` archive with `npm install -g <archive> --ignore-scripts`. Obtain approval before
 installing software; npm downloads packages. After installation, verify the
 version and run `skillcrit doctor .` from the project being audited.
+For cleanup plans, prefer `--fix --out -`. Versions before 0.5.1-rc.3 can
+follow output-file links and overwrite their targets; do not use file export
+with those builds. In 0.5.1-rc.3, file export requires a new destination and
+refuses an existing file or link. If refused, choose a new filename or stdout;
+do not delete the existing destination just to make the export succeed.
 
 Only if a real source checkout already exists, use
 `node <checkout>/dist/cli.js` after building it. Never assume a skill folder or

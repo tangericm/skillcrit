@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1-rc.3 (corrected pilot candidate)
+
+- Make cleanup export create a new file exclusively; existing files, hard links, symbolic links and dangling links are refused without changing their targets.
+- Create new report files with owner-only permissions on POSIX systems. Concurrent exports to one path allow only one writer.
+- Add regression tests for output aliases and protected names, plus three shipped export simulations (19 total).
+- Reject Windows alternate data streams, reserved device output names, and protected-name aliases; test packed installations in all six CI combinations.
+- Clarify the CLI and skill guidance for existing output files and older affected releases.
+
 ## 0.5.1-rc.2 (pilot release candidate)
 
 - Flush pending report output before exiting. Large piped JSON reports could

@@ -19,19 +19,20 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Release candidate:** `0.5.1-rc.2` is available on
-[npm](https://www.npmjs.com/package/skillcrit/v/0.5.1-rc.2) and through the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
-Requires Node 22+. Install the verified candidate and audit your project:
+**Corrected release candidate:** `0.5.1-rc.3`. Get the built archive and checksum
+manifest from the [GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.3)
+and follow the [pilot guide](docs/pilot-guide.md) to install it. Requires Node 22+.
+After installation:
 
 ```bash
-npm i -g skillcrit@0.5.1-rc.2
 skillcrit --version
 skillcrit doctor /path/to/your/project --user
 ```
 
-Omit `--user` to inspect only the project. For a disposable local installation
-or checksum-verified archive, follow the [pilot guide](docs/pilot-guide.md).
+Omit `--user` to inspect only the project. npm currently contains `0.5.1-rc.2`;
+its file-export path can overwrite a linked file. Use the corrected GitHub
+candidate until its npm publication is confirmed. On older builds, use
+`--fix --out -` for cleanup plans instead of exporting to a file.
 
 ```
 # skillcrit doctor
@@ -65,16 +66,14 @@ and risk signals across all scanned copies. The example above is abbreviated.
 
 ## Install
 
-Install the exact candidate shown above, or use `next` to follow the current
-prerelease. The [verified tarball](docs/pilot-guide.md) is also available.
+Install the [verified candidate archive](docs/pilot-guide.md) into a disposable
+project or put it on PATH with `npm install -g <verified-archive.tgz> --ignore-scripts`.
 The plugin and agent-skill routes below require repository access and a
-separately installed CLI.
+separately installed CLI. Check `skillcrit --version` before invoking them.
 
-**Current prerelease CLI on PATH:**
-
-```bash
-npm i -g skillcrit@next
-```
+Once registry publication is verified, `npm i -g skillcrit@0.5.1-rc.3` can
+replace the archive installation. `next` follows the registry prerelease;
+always check the resolved version.
 
 **Let your agent run it** — installs `skills/skillcrit` as an agent skill:
 
@@ -103,7 +102,7 @@ Cursor 3.19.7 discovered one skill in the copied candidate; external symlinks
 were rejected by that client's plugin loader.
 
 All skill/plugin routes require the CLI separately; they install instructions,
-not a runnable CLI. Install `skillcrit@0.5.1-rc.2` or `skillcrit@next`, then verify
+not a runnable CLI. Install the corrected candidate archive, then verify
 `skillcrit --version` and `skillcrit doctor .` from the project to audit.
 An existing source checkout is an optional alternative: run `npm ci` and
 `npm run build` there, then invoke `node <checkout>/dist/cli.js doctor <project>`.
@@ -191,9 +190,11 @@ Client-specific frontmatter controls are portability notes: preserve fields that
 the target client supports rather than moving operational controls into metadata.
 
 Install the reviewed candidate in the repository you want to audit with
-`npm install --save-dev --save-exact skillcrit@0.5.1-rc.2` and commit the package
-files. The workflow below uses that locally installed CLI. A checksum-verified
-GitHub tarball can also be used. This remains a prerelease.
+`npm install --save-dev --save-exact <verified-archive.tgz> --ignore-scripts`
+and commit the package files and archive, so CI can reproduce the install.
+After verified registry publication, use `skillcrit@0.5.1-rc.3` instead of a
+local archive. The workflow below uses that installed CLI. This remains a
+prerelease.
 
 ```yaml
 name: audit skills
@@ -287,8 +288,11 @@ the documented `$HOME` skill directories and nothing else. The walk is bounded
 (depth 8, 20k directories) and reports when it truncates. `SKILLCRIT_HOME`
 overrides the home directory for CI fixtures and containers.
 
-`--fix` writes exactly one file, the cleanup markdown, and refuses to overwrite
-`package.json`, `SKILL.md`, or `.env`. It never deletes a skill.
+`--fix` writes a new cleanup markdown file. It refuses existing destinations,
+including symbolic links and hard links, and protected names such as
+`package.json`, `SKILL.md`, `LICENSE`, or `.env`. Choose a new filename or use
+`--out -` to print the plan. File export requires filesystem hard-link support;
+otherwise use stdout. It never deletes a skill.
 
 `eval` creates temporary workspaces and executes task test commands without a
 security sandbox. Custom `--tasks` suites must be trusted: their commands have

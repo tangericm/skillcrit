@@ -5,9 +5,9 @@ resolve runtime precedence, or measure whether a skill improves an agent's work.
 
 ## Verified surfaces
 
-Evidence recorded September 4–5, 2026. Current candidate: `0.5.1-rc.2`.
+Evidence recorded September 4–5, 2026. Current candidate: `0.5.1-rc.3`.
 The exact source commit, package checksums and final CI links accompany the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.3).
 
 | Surface | Evidence | Boundary |
 | --- | --- | --- |
@@ -25,7 +25,13 @@ The candidate was also checked against two real installed skill packs with an
 independent inventory and unchanged file hashes. Controlled native tests used
 prepared fixtures and a CLI already available on PATH. These observations are
 not an activation-rate, agent-performance, or external-adoption benchmark.
-See [RC2 verification](verification/0.5.1-rc.2.md) and the historical
+RC3 additionally verified new-file export and preservation of an existing linked
+output in fresh Claude local-plugin and Codex plain-skill trials. A Codex login
+shell initially selected the older global CLI; the candidate was retested with
+its explicit installed path. Verify the executable version inside the agent.
+Cursor RC3 files were copied locally, but a locked desktop prevented renewed
+UI checks; its table evidence above remains from RC2.
+See [RC3 verification](verification/0.5.1-rc.3.md), [RC2 verification](verification/0.5.1-rc.2.md), and the historical
 [RC1 record](verification/0.5.1-rc.1.md).
 
 ## Inventory coverage is different from client discovery
@@ -65,7 +71,7 @@ See [Security](../SECURITY.md) for the exact inspection boundary.
 For Cursor 3.19.7, copy the plugin into a real
 `~/.cursor/plugins/local/skillcrit` directory, including its manifest, `skills/`
 and the referenced `docs/icon.png`. Reload the window and confirm **Skillcrit**,
-**0.5.1-rc.2**, and **Skills 1** in Customize. A symlink outside the local-plugin
+the installed candidate version, and **Skills 1** in Customize. A symlink outside the local-plugin
 root was rejected in this client version; do not change security settings to
 work around that check. The CLI is still a separate prerequisite.
 
