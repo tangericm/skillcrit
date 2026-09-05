@@ -1,6 +1,6 @@
 {
   "name": "skillcrit",
-  "version": "0.5.1-rc.4",
+  "version": "0.5.1",
   "description": "Audit installed agent skills, conflicts, and context costs.",
   "type": "module",
   "bin": {

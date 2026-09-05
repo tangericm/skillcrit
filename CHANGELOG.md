@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 (first public stable release)
+
+- Promote the verified RC4 CLI and plugin to stable without changing inventory or export behavior.
+- Document npm installation, Cursor RC4 registration/export/coverage trials, three real installed collections, and the full maintainer inventory.
+- Use maintainer engineering validation for the initial stable release; collect external adoption feedback after launch.
+- Retain explicit limits for heuristic findings, client runtime selection, coverage, token estimates and experimental evaluation.
+
 ## 0.5.1-rc.4 (simulated-user follow-up)
 
 - Fix the pilot installation instructions for Unicode folder names and existing parent npm projects.

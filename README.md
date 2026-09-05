@@ -19,20 +19,19 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Corrected release candidate:** `0.5.1-rc.4`. Get the built archive and checksum
-manifest from the [GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.4)
-and follow the [pilot guide](docs/pilot-guide.md) to install it. Requires Node 22+.
-After installation:
+Requires Node 22+. Install the stable CLI, then audit your project:
 
 ```bash
+npm install --global skillcrit@0.5.1 --ignore-scripts
 skillcrit --version
 skillcrit doctor /path/to/your/project --user
 ```
 
-Omit `--user` to inspect only the project. npm currently contains `0.5.1-rc.2`;
-its file-export path can overwrite a linked file. Use the corrected GitHub
-candidate until its npm publication is confirmed. On older builds, use
-`--fix --out -` for cleanup plans instead of exporting to a file.
+Omit `--user` to inspect only the project. The [release](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1)
+includes a built archive, checksums and verification evidence. For a disposable
+installation and a first audit, follow the [getting-started guide](docs/pilot-guide.md).
+Builds before `0.5.1-rc.3` can overwrite existing cleanup-output files; upgrade
+or use `--fix --out -` on those older builds.
 
 ```
 # skillcrit doctor
@@ -66,19 +65,16 @@ and risk signals across all scanned copies. The example above is abbreviated.
 
 ## Install
 
-Install the [verified candidate archive](docs/pilot-guide.md) into a disposable
-project or put it on PATH with `npm install -g <verified-archive.tgz> --ignore-scripts`.
-The plugin and agent-skill routes below require repository access and a
-separately installed CLI. Check `skillcrit --version` before invoking them.
-
-Once registry publication is verified, `npm i -g skillcrit@0.5.1-rc.4` can
-replace the archive installation. `next` follows the registry prerelease;
-always check the resolved version.
+Install from npm as shown above, or use the [verified release archive](docs/pilot-guide.md).
+The skill and plugin routes below require a separately installed CLI. They
+install instructions, not a runnable executable. Check `skillcrit --version`
+before invoking them. `latest` tracks the stable release; `next` is reserved
+for release candidates. Pin an exact version for reproducible CI.
 
 **Let your agent run it** — installs `skills/skillcrit` as an agent skill:
 
 ```bash
-# First install the CLI from the built checkout or verified candidate.
+# First install the CLI from the built checkout or verified release.
 skillcrit --version
 npx skills add tangericm/skillcrit
 ```
@@ -86,7 +82,7 @@ npx skills add tangericm/skillcrit
 **As a Claude Code plugin** — skill plus marketplace entry:
 
 ```bash
-# First install the CLI from the built checkout or verified candidate.
+# First install the CLI from the built checkout or verified release.
 skillcrit --version
 claude plugin marketplace add tangericm/skillcrit
 claude plugin install skillcrit@skillcrit
@@ -98,11 +94,11 @@ repository directly.
 
 **As a local Cursor plugin** — follow the verified
 [directory-copy installation](docs/compatibility.md#local-cursor-installation).
-Cursor 3.19.7 discovered one skill in the copied candidate; external symlinks
+Cursor 3.19.7 registered the copied RC4 plugin and one skill; external symlinks
 were rejected by that client's plugin loader.
 
 All skill/plugin routes require the CLI separately; they install instructions,
-not a runnable CLI. Install the corrected candidate archive, then verify
+not a runnable CLI. Install the current release, then verify
 `skillcrit --version` and `skillcrit doctor .` from the project to audit.
 An existing source checkout is an optional alternative: run `npm ci` and
 `npm run build` there, then invoke `node <checkout>/dist/cli.js doctor <project>`.
@@ -189,12 +185,10 @@ above 20 members get one summary with no pairwise details or cleanup ranking.
 Client-specific frontmatter controls are portability notes: preserve fields that
 the target client supports rather than moving operational controls into metadata.
 
-Install the reviewed candidate in the repository you want to audit with
-`npm install --save-dev --save-exact <verified-archive.tgz> --ignore-scripts`
-and commit the package files and archive, so CI can reproduce the install.
-After verified registry publication, use `skillcrit@0.5.1-rc.4` instead of a
-local archive. The workflow below uses that installed CLI. This remains a
-prerelease.
+Install the reviewed version in the repository you want to audit with
+`npm install --save-dev --save-exact skillcrit@0.5.1 --ignore-scripts`
+and commit `package.json` and the lockfile so CI can reproduce the install.
+The workflow below uses that installed CLI.
 
 ```yaml
 name: audit skills
@@ -325,7 +319,7 @@ CI runs the suite on Ubuntu, macOS, and Windows against Node 22 and 24, then
 lints skillcrit with itself.
 
 See [Contributing](CONTRIBUTING.md) for development contracts,
-[the pilot guide](docs/pilot-guide.md) to try the candidate and report feedback,
+[the getting-started guide](docs/pilot-guide.md) to try the release and report feedback,
 and [Releasing](docs/releasing.md) for verification and promotion criteria.
 
 ## License

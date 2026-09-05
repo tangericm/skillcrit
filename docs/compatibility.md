@@ -5,36 +5,41 @@ resolve runtime precedence, or measure whether a skill improves an agent's work.
 
 ## Verified surfaces
 
-Evidence recorded September 4–5, 2026. Current candidate: `0.5.1-rc.4`.
+Evidence recorded September 4–5, 2026. Current stable release: `0.5.1`.
 The exact source commit, package checksums and final CI links accompany the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.4).
+[GitHub release](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1).
 
 | Surface | Evidence | Boundary |
 | --- | --- | --- |
 | CLI on Linux, macOS, Windows; Node 22 and 24 | CI builds, tests and controlled simulations; separate packaged install checks | This tests Skillcrit, not those platforms' native agent clients |
 | Claude Code 2.1.260, macOS | RC1 manifest/install/discovery checks; RC2 local plugin selected for two ordinary requests and unused for an unrelated control; two separate namespaces invoked | Few controlled observations; public marketplace and broad reliability unverified |
 | Codex CLI 0.147.0, macOS | Plain skill discovered; selected for two ordinary requests and unused for an unrelated control; same-name ancestor/project entries both discovered | Plugin marketplace installation and runtime selection among duplicate names remain unverified |
-| Cursor desktop 3.19.7, macOS | Plain skill discovered; explicit and automatic audits ran; incomplete coverage preserved; a copied local plugin registered version rc.2 and one skill | Local installation and plain-skill invocation tested; public marketplace approval remains open |
+| Cursor desktop 3.19.7, macOS | Plain skill discovered; explicit and automatic audits ran; incomplete coverage preserved; a copied local plugin registered RC4 and one skill; RC4 export and incomplete-coverage trials passed | Local installation and plain-skill invocation tested; public marketplace approval remains open |
 | Other listed clients | Recognized filesystem locations and generic SKILL.md parsing | No native installation or runtime compatibility claim |
 
 All skill/plugin routes need the CLI separately. A skill-only installation does
-not contain a built executable. Use the [pilot installation](pilot-guide.md)
+not contain a built executable. Use the [disposable installation](pilot-guide.md)
 before invoking the skill from an agent.
 
-The candidate was also checked against two real installed skill packs with an
-independent inventory and unchanged file hashes. Controlled native tests used
+RC4 was also checked against three real installed skill collections: 71 skills
+and 229 hashed files, with matching independent inventory and unchanged files. Controlled native tests used
 prepared fixtures and a CLI already available on PATH. These observations are
 not an activation-rate, agent-performance, or external-adoption benchmark.
 RC3 additionally verified new-file export and preservation of an existing linked
 output in fresh Claude local-plugin and Codex plain-skill trials. A Codex login
 shell initially selected the older global CLI; the candidate was retested with
 its explicit installed path. Verify the executable version inside the agent.
-Cursor RC3 files were copied locally, but a locked desktop prevented renewed
-UI checks; its table evidence above remains from RC2.
-RC4 changes install guidance and budget wording; native workflow observations below
-remain versioned evidence from the earlier candidates. See
-[RC4 verification](verification/0.5.1-rc.4.md), [RC3 verification](verification/0.5.1-rc.3.md), [RC2 verification](verification/0.5.1-rc.2.md), and the historical
-[RC1 record](verification/0.5.1-rc.1.md).
+Cursor 3.19.7 subsequently registered the RC4 plugin and ran two explicit
+workflows: preserving an occupied symbolic-link destination while creating a
+new plan, and retaining exit 3 plus coverage reasons for an oversized helper.
+File hashes confirmed only the requested new plan changed the fixture.
+These tests used RC4; the stable version changes packaging metadata and release
+guidance, with final stable-archive checks recorded separately.
+See [stable verification](verification/0.5.1.md),
+[RC4 verification](verification/0.5.1-rc.4.md),
+[RC3 verification](verification/0.5.1-rc.3.md),
+[RC2 verification](verification/0.5.1-rc.2.md), and
+[RC1 verification](verification/0.5.1-rc.1.md).
 
 ## Inventory coverage is different from client discovery
 
@@ -73,7 +78,7 @@ See [Security](../SECURITY.md) for the exact inspection boundary.
 For Cursor 3.19.7, copy the plugin into a real
 `~/.cursor/plugins/local/skillcrit` directory, including its manifest, `skills/`
 and the referenced `docs/icon.png`. Reload the window and confirm **Skillcrit**,
-the installed candidate version, and **Skills 1** in Customize. A symlink outside the local-plugin
+the installed release version, and **Skills 1** in Customize. A symlink outside the local-plugin
 root was rejected in this client version; do not change security settings to
 work around that check. The CLI is still a separate prerequisite.
 
@@ -97,4 +102,4 @@ the synthetic `eval --agent stub` results.
 - [Cursor: local plugin testing](https://prod.cursor.com/docs/plugins)
 
 Documentation establishes intended support. The evidence table records what
-was actually checked on this candidate.
+was actually checked on each version.
