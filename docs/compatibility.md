@@ -5,9 +5,9 @@ resolve runtime precedence, or measure whether a skill improves an agent's work.
 
 ## Verified surfaces
 
-Evidence recorded September 4–5, 2026. Current candidate: `0.5.1-rc.3`.
+Evidence recorded September 4–5, 2026. Current candidate: `0.5.1-rc.4`.
 The exact source commit, package checksums and final CI links accompany the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.3).
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.4).
 
 | Surface | Evidence | Boundary |
 | --- | --- | --- |
@@ -31,7 +31,9 @@ shell initially selected the older global CLI; the candidate was retested with
 its explicit installed path. Verify the executable version inside the agent.
 Cursor RC3 files were copied locally, but a locked desktop prevented renewed
 UI checks; its table evidence above remains from RC2.
-See [RC3 verification](verification/0.5.1-rc.3.md), [RC2 verification](verification/0.5.1-rc.2.md), and the historical
+RC4 changes install guidance and budget wording; native workflow observations below
+remain versioned evidence from the earlier candidates. See
+[RC4 verification](verification/0.5.1-rc.4.md), [RC3 verification](verification/0.5.1-rc.3.md), [RC2 verification](verification/0.5.1-rc.2.md), and the historical
 [RC1 record](verification/0.5.1-rc.1.md).
 
 ## Inventory coverage is different from client discovery

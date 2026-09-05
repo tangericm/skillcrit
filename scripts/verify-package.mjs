@@ -33,12 +33,18 @@ try {
   }
   assert.ok(files.every(file => !/^(?:node_modules|output|docs\/superpowers)\//u.test(file)),
     "Package contains local work output; use a clean source checkout");
+  const parentPackage = path.join(root, "package.json");
+  fs.writeFileSync(parentPackage, JSON.stringify({ name: "unrelated-parent-project", private: true }));
+  const parentBefore = hash(parentPackage);
   const consumer = path.join(root, "consumer café space");
   fs.mkdirSync(consumer);
-  fs.writeFileSync(path.join(consumer, "package.json"),
-    JSON.stringify({ name: "skillcrit-package-consumer", version: "1.0.0", private: true, type: "module" }));
-  run(consumer, [npmCli, "install", "--save-dev", "--save-exact", "--ignore-scripts", "--no-audit", "--no-fund", path.join(root, pack.filename)]);
+  // Follow the pilot guide from an empty folder. npm init rejects Unicode
+  // package names; an explicit prefix also avoids installing into an ancestor.
+  run(consumer, [npmCli, "install", "--prefix", ".", "--save-dev", "--save-exact", "--ignore-scripts", "--no-audit", "--no-fund", path.join(root, pack.filename)]);
   run(consumer, [npmCli, "ci", "--ignore-scripts", "--no-audit", "--no-fund"]);
+  assert.equal(hash(parentPackage), parentBefore);
+  assert.equal(fs.existsSync(path.join(root, "node_modules")), false);
+  assert.equal(fs.existsSync(path.join(root, "package-lock.json")), false);
   const installed = path.join(consumer, "node_modules", "skillcrit");
   const cli = path.join(installed, "dist", "cli.js");
   assert.equal(run(consumer, [npmCli, "exec", "--offline", "--", "skillcrit", "--version"]).trim(), `skillcrit ${version}`);
@@ -68,6 +74,7 @@ try {
   assert.ok(simulations.total >= 19);
   process.stdout.write(JSON.stringify({ version, node: process.version, platform: process.platform,
     packageFiles: files.length, npmIntegrity: pack.integrity, isolatedInstall: true, lockfileReinstall: true,
+    firstTimeInstallFromEmptyFolder: true, ancestorProjectUnchanged: true,
     executableAndLibraryImports: true, unicodePaths: true, doctorAndSarif: true,
     existingExportPreserved: true, skillUnchanged: true, simulations }, null, 2) + "\n");
 } finally {

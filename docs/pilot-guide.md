@@ -4,25 +4,28 @@ The pilot tests whether Skillcrit helps people maintain their real skill
 collections. Start with a project you know well. A useful outcome can be a
 confirmed issue, a clearer explanation, or evidence that the tool adds no value.
 
-Candidate: **`0.5.1-rc.3`**, distributed through the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.3).
+Candidate: **`0.5.1-rc.4`**, distributed through the
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.4).
 Use this corrected candidate for file-export testing. Registry publication is
 separate; the older `0.5.1-rc.2` package does not contain the export fix.
 
 ## Install in a disposable directory
 
-Requires Node 22+ and npm. Download `skillcrit-0.5.1-rc.3.tgz` and `SHA256SUMS`
+Requires Node 22+ and npm. Download `skillcrit-0.5.1-rc.4.tgz` and `SHA256SUMS`
 from the same prerelease into a new empty folder. Verify the archive before
 installing:
 
 ```bash
-node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.5.1-rc.3.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
-npm init -y
-npm install --save-dev --save-exact ./skillcrit-0.5.1-rc.3.tgz --ignore-scripts
+node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.5.1-rc.4.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
+npm install --prefix . --save-dev --save-exact ./skillcrit-0.5.1-rc.4.tgz --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 ```
 
-The version must be `skillcrit 0.5.1-rc.3`. These commands work in a POSIX shell
+The explicit `--prefix .` keeps installation in this folder, even if a parent
+folder already contains an npm project. No `npm init` step is needed, so folder
+names with spaces or Unicode work too.
+
+The version must be `skillcrit 0.5.1-rc.4`. These commands work in a POSIX shell
 and PowerShell. Installation downloads npm dependencies. The audit itself
 makes no network requests and needs no API key.
 
@@ -118,6 +121,6 @@ Installation blockers and misleading findings must be triaged before promotion.
 
 **Current status:** maintainer checks on two real installed packs, native client
 trials, and a repeatable simulation kit are recorded in the
-[RC3 verification record](verification/0.5.1-rc.3.md). No external participants or
+[RC4 verification record](verification/0.5.1-rc.4.md). No external participants or
 voluntary second-session results are recorded. Maintainer trials do not count
 as participant feedback.
