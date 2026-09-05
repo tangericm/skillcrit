@@ -5,28 +5,28 @@ resolve runtime precedence, or measure whether a skill improves an agent's work.
 
 ## Verified surfaces
 
-Evidence recorded September 4, 2026, for the `0.5.1-rc.1` candidate. The exact
-release commit, archive checksums, and final CI link travel with the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.1).
+Evidence recorded September 4–5, 2026. Current candidate: `0.5.1-rc.2`.
+The exact source commit, package checksums and final CI links accompany the
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
 
 | Surface | Evidence | Boundary |
 | --- | --- | --- |
-| CLI on Linux, macOS, Windows; Node 22 and 24 | Build, tests, packaged installation and audit run in the CI matrix | This tests Skillcrit, not those platforms' agent clients |
-| Claude Code 2.1.260, macOS | Strict validation; isolated marketplace install; one discovered skill; two explicit live skill invocations on controlled projects | Automatic triggering, runtime precedence, broad reliability and usefulness remain untested |
-| Codex CLI 0.147.0, macOS | Native `skills/list` discovers an enabled repo skill; two explicit live invocations via the plain skill route | Plugin marketplace installation, automatic triggering, runtime precedence and broad reliability remain untested |
-| Cursor | Repository supplies `.cursor-plugin/plugin.json` and root Agent Plugins manifest; structure checked against current documentation | No live Cursor installation, discovery, or activation test yet |
+| CLI on Linux, macOS, Windows; Node 22 and 24 | CI builds, tests and controlled simulations; separate packaged install checks | This tests Skillcrit, not those platforms' native agent clients |
+| Claude Code 2.1.260, macOS | RC1 manifest/install/discovery checks; RC2 local plugin selected for two ordinary requests and unused for an unrelated control; two separate namespaces invoked | Few controlled observations; public marketplace and broad reliability unverified |
+| Codex CLI 0.147.0, macOS | Plain skill discovered; selected for two ordinary requests and unused for an unrelated control; same-name ancestor/project entries both discovered | Plugin marketplace installation and runtime selection among duplicate names remain unverified |
+| Cursor desktop 3.19.7, macOS | Plain skill discovered; explicit and automatic audits ran; incomplete coverage preserved; a copied local plugin registered version rc.2 and one skill | Local installation and plain-skill invocation tested; public marketplace approval remains open |
 | Other listed clients | Recognized filesystem locations and generic SKILL.md parsing | No native installation or runtime compatibility claim |
 
 All skill/plugin routes need the CLI separately. A skill-only installation does
 not contain a built executable. Use the [pilot installation](pilot-guide.md)
 before invoking the skill from an agent.
 
-In each client's two live trials, the prompt supplied the installed executable
-path. The agent audited the intended project, distinguished `Read`/`Bash`
-frontmatter variants, and refused to treat depth-limited coverage as sufficient
-for cleanup. Fixture hashes were unchanged. These are four observed controlled
-invocations, not an activation-rate or agent-performance benchmark. See the
-[verification record](verification/0.5.1-rc.1.md).
+The candidate was also checked against two real installed skill packs with an
+independent inventory and unchanged file hashes. Controlled native tests used
+prepared fixtures and a CLI already available on PATH. These observations are
+not an activation-rate, agent-performance, or external-adoption benchmark.
+See [RC2 verification](verification/0.5.1-rc.2.md) and the historical
+[RC1 record](verification/0.5.1-rc.1.md).
 
 ## Inventory coverage is different from client discovery
 
@@ -59,6 +59,15 @@ Coverage is bounded: depth 8, 20,000 directories, input-size limits, and a
 separate bundled-script limit. An explicit ignore excludes inputs from the
 requested inventory; reaching a limit on included inputs produces exit 3.
 See [Security](../SECURITY.md) for the exact inspection boundary.
+
+## Local Cursor installation
+
+For Cursor 3.19.7, copy the plugin into a real
+`~/.cursor/plugins/local/skillcrit` directory, including its manifest, `skills/`
+and the referenced `docs/icon.png`. Reload the window and confirm **Skillcrit**,
+**0.5.1-rc.2**, and **Skills 1** in Customize. A symlink outside the local-plugin
+root was rejected in this client version; do not change security settings to
+work around that check. The CLI is still a separate prerequisite.
 
 ## Remaining native trials
 

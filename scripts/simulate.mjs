@@ -141,6 +141,22 @@ try {
     invoke(root, ["doctor", path.join(root, "missing")], 3);
     invoke(root, ["lint", root, "--not-a-flag"], 2);
   });
+  for (const [command, exitCode, complete] of [["scan", 0, true], ["lint", 1, true], ["doctor", 3, false]]) {
+    scenario(`large piped ${command} report preserves output and exit ${exitCode}`, root => {
+      for (let i = 0; i < 256; i++) {
+        write(root, `skills/review-${i}/SKILL.md`,
+          `---\nname: review-${i}\ndescription: Review changes when asked.\nallowed-tools: Bash\n---\n` +
+          "Review café changes carefully.\n".repeat(128));
+      }
+      if (!complete) write(root, "data/a/b/c/d/e/f/g/h/i/j/file.txt", "deep");
+    }, root => {
+      const output = invoke(root, [command, root, "--json"], exitCode);
+      const report = JSON.parse(output);
+      assert.ok(Buffer.byteLength(output) > 128 * 1024);
+      assert.equal(report.coverage.complete, complete);
+      assert.equal(command === "scan" ? report.skills.length : report.scanned, 256);
+    });
+  }
   const report = {
     kind: "controlled CLI simulations; no external participants or live agent performance measurement",
     version: invoke(workspace, ["--version"], 0).trim(), node: process.version,

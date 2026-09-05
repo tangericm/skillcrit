@@ -64,8 +64,10 @@ security verdict. A skill that trips nothing here is not thereby safe, and a
 skill that trips several may be entirely legitimate.
 
 - `SC4001` network reach, `SC4002` credential and secret reads, `SC4003`
-  download-and-execute, `SC4004` destructive shell commands, `SC4005` unpinned
-  installs, `SC4006` a broad `allowed-tools` grant.
+  download-and-execute, `SC4004` destructive shell commands, `SC4005` installs
+  without a visible version pin, `SC4006` a broad `allowed-tools` grant.
+- `SC4005` cannot tell whether a referenced requirements file or lockfile pins
+  resolution. Inspect those files before changing an installation command.
 - In SKILL.md only fenced code blocks are matched. Prose that warns *against*
   `rm -rf` is not a signal, and flagging it would teach readers to ignore the
   whole list.

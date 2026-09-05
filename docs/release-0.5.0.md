@@ -1,7 +1,7 @@
 # v0.5.0 release checklist
 
 Historical checklist for the unpublished 0.5.0 preview. The current source
-version is `0.5.1-rc.1`, which includes security and correctness fixes. Follow
+version is `0.5.1-rc.2`, which includes security and correctness fixes. Follow
 the [current release process](releasing.md). Do not
 publish the unpatched 0.5.0 candidate; use the current changelog and verify a
 new release candidate before any npm publication.

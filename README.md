@@ -19,8 +19,8 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Release candidate:** `0.5.1-rc.1` is available through the
-[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.1).
+**Release candidate:** `0.5.1-rc.2` is available through the
+[GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
 Follow the [pilot guide](docs/pilot-guide.md) for checksum-verified installation.
 npm registry publication is still pending. To build from source:
 
@@ -70,10 +70,10 @@ PATH, run `npm install -g .` from the built checkout and verify
 `skillcrit --version`. The plugin and agent-skill routes below require repository
 access and that separately installed CLI.
 
-**After npm publication** — a CLI on PATH:
+**After npm publication** — the prerelease CLI on PATH:
 
 ```bash
-npm i -g skillcrit
+npm i -g skillcrit@next
 ```
 
 **Let your agent run it** — installs `skills/skillcrit` as an agent skill:
@@ -97,8 +97,13 @@ claude plugin install skillcrit@skillcrit
 `plugin.json`, so any client that reads that spec can install it from the
 repository directly.
 
+**As a local Cursor plugin** — follow the verified
+[directory-copy installation](docs/compatibility.md#local-cursor-installation).
+Cursor 3.19.7 discovered one skill in the copied candidate; external symlinks
+were rejected by that client's plugin loader.
+
 All skill/plugin routes require the CLI separately; they install instructions,
-not a runnable CLI. Use the built checkout above (or `npm i -g skillcrit` after
+not a runnable CLI. Use the built checkout above (or `npm i -g skillcrit@next` after
 publication), then verify
 `skillcrit --version` and `skillcrit doctor .` from the project to audit.
 An existing source checkout is an optional alternative: run `npm ci` and
@@ -258,13 +263,13 @@ as warnings rather than ignored. `skillcrit rules` prints the catalogue.
 Copilot, Continue, Goose, and DeepSeek — plus generic `skills/` and `plugins/`
 trees. These are inventory locations, not a promise of native runtime support.
 The [compatibility matrix](docs/compatibility.md) separates tested installation
-and discovery from documentation-only support and untested activation behavior.
+and controlled activation trials from documentation-only support and remaining gaps.
 
 ## Risk inventory
 
 `SC4xxx` findings are **deterministic pattern matches, not a security verdict**:
 remote-code execution, credential reads, destructive shell commands, network
-reaches, unpinned installs, broad `allowed-tools` grants. They exist to route a
+reaches, installs without visible version pins, broad `allowed-tools` grants. They exist to route a
 human to the lines worth reading.
 
 Script inventory is best-effort: regular files only, at most 64 files, three

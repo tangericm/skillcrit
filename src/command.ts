@@ -24,8 +24,8 @@ import { packageVersion } from "./version.js";
 /**
  * Exit codes are part of the contract; CI scripts branch on them.
  *
- *   0  clean, or findings below the configured gate
- *   1  findings at or above the gate (default: warning)
+ *   0  command completed; lint findings are below the configured gate
+ *   1  lint findings at or above the gate (default: warning)
  *   2  usage error — bad flag, missing argument, unknown command
  *   3  the run itself failed (unreadable config, adapter error)
  */
@@ -359,14 +359,16 @@ Common flags
   --help                this text; \`skillcrit help <command>\` for one command
 
 Exit codes
-  0  clean, or only findings below the gate
-  1  findings at or above --fail-on
+  0  command completed; for lint, no findings reached its gate
+  1  lint findings at or above --fail-on
   2  usage error
   3  run failed or incomplete (bad input/config, skipped files, traversal limit)
 
-60-second audit
-  npm i -g skillcrit
+Audit with an installed CLI
   skillcrit doctor . --user
+
+Installation instructions and current release status
+  https://github.com/tangericm/skillcrit#install
 `;
 }
 

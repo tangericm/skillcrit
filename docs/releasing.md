@@ -37,7 +37,7 @@ Install the archive in a different initialized project:
 
 ```bash
 npm init -y
-npm install --save-dev --save-exact /absolute/path/to/skillcrit-0.5.1-rc.1.tgz --ignore-scripts
+npm install --save-dev --save-exact /absolute/path/to/skillcrit-0.5.1-rc.2.tgz --ignore-scripts
 npm ci --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 node ./node_modules/skillcrit/dist/cli.js doctor /absolute/path/to/test-project --json
@@ -53,10 +53,10 @@ SHA-256, source commit and verification results; do not include private paths.
 
 ## GitHub prerelease
 
-Create annotated tag `v0.5.1-rc.1` at the reviewed, passing commit. Never move an
+Create annotated tag `v0.5.1-rc.2` at the reviewed, passing commit. Never move an
 existing release tag to different code. Publish a GitHub prerelease with:
 
-- `skillcrit-0.5.1-rc.1.tgz`, the exact archive tested above;
+- `skillcrit-0.5.1-rc.2.tgz`, the exact archive tested above;
 - `SHA256SUMS`, including the archive and verification report;
 - `verification.json`, with source commit, version, checks and honest limits.
 
@@ -75,12 +75,12 @@ the name can be claimed. Do not put access tokens in issues, chat, or git.
 From the directory containing the verified archive:
 
 ```bash
-npm publish ./skillcrit-0.5.1-rc.1.tgz --tag next --access public
-npm view skillcrit@0.5.1-rc.1 version dist.integrity dist-tags --json
+npm publish ./skillcrit-0.5.1-rc.2.tgz --tag next --access public
+npm view skillcrit@0.5.1-rc.2 version dist.integrity dist-tags --json
 ```
 
 Compare registry integrity with the retained package integrity. In another
-clean consumer project, install `skillcrit@0.5.1-rc.1`, repeat the version/audit
+clean consumer project, install `skillcrit@0.5.1-rc.2`, repeat the version/audit
 smoke tests, then update installation status in the README. Do not advertise a
 registry install until it succeeds. Keep prereleases off npm's `latest` tag.
 

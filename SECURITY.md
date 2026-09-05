@@ -35,7 +35,7 @@ the inventory commands' read-only/no-network guarantees do not apply to them.
 ## What the risk inventory is not
 
 `SC4xxx` findings are deterministic pattern matches — `curl … | sh`, credential
-environment variables, `rm -rf`, unpinned installs, broad `allowed-tools`
+environment variables, `rm -rf`, installs without visible version pins, broad `allowed-tools`
 grants. They exist to route a human to the lines worth reading.
 
 Bundled-script inventory skips symlinks and non-regular files. It checks at most
@@ -64,4 +64,4 @@ Open a security advisory on the repository:
 Please do not open a public issue for a vulnerability report. Include the
 version (`skillcrit --version`), the platform, and a minimal reproduction.
 
-Supported during the pilot: `0.5.1-rc.1`. No stable npm release is available yet.
+Supported during the pilot: `0.5.1-rc.2`. No stable npm release is available yet.
