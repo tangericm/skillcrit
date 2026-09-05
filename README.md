@@ -291,7 +291,8 @@ overrides the home directory for CI fixtures and containers.
 `--fix` writes a new cleanup markdown file. It refuses existing destinations,
 including symbolic links and hard links, and protected names such as
 `package.json`, `SKILL.md`, `LICENSE`, or `.env`. Choose a new filename or use
-`--out -` to print the plan. It never deletes a skill.
+`--out -` to print the plan. File export requires filesystem hard-link support;
+otherwise use stdout. It never deletes a skill.
 
 `eval` creates temporary workspaces and executes task test commands without a
 security sandbox. Custom `--tasks` suites must be trusted: their commands have

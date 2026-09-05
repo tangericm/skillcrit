@@ -478,14 +478,19 @@ function writeCleanupDoc(out: string | undefined, markdown: string): void {
     throw new Error(`refusing to write cleanup doc over ${path.basename(resolved)}`);
   }
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
+  const staging = fs.mkdtempSync(path.join(path.dirname(resolved), ".skillcrit-report-"));
   try {
-    // Exclusive creation rejects existing files and link aliases without a
-    // check-then-write race. Reports can contain private paths and excerpts.
-    fs.writeFileSync(resolved, markdown, { flag: "wx", mode: 0o600 });
+    const staged = path.join(staging, "report.md");
+    fs.writeFileSync(staged, markdown, { flag: "wx", mode: 0o600 });
+    // Publish a completed file without following or replacing the destination.
+    // Windows exclusive-open can follow dangling links; link creation cannot.
+    fs.linkSync(staged, resolved);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       throw new Error(`cleanup output already exists: ${resolved}; choose a new path or use --out -`);
     }
-    throw error;
+    throw new Error(`could not safely create cleanup output: ${String(error)}; use --out - for stdout`);
+  } finally {
+    fs.rmSync(staging, { recursive: true, force: true });
   }
 }

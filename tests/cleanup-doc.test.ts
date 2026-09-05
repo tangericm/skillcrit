@@ -131,6 +131,8 @@ describe("cleanup markdown", () => {
         else expect(fs.readFileSync(target, "utf8")).toBe(original);
         if (kind === "regular file") expect(fs.readFileSync(out, "utf8")).toBe("Existing user notes\n");
         if (before.isSymbolicLink()) expect(fs.readlinkSync(out)).toBe(target);
+        expect(fs.readdirSync(dir).sort()).toEqual(kind === "dangling symbolic link"
+          ? ["cleanup.md"] : ["cleanup.md", "package.json"]);
       } finally {
         fs.rmSync(dir, { recursive: true, force: true });
       }
