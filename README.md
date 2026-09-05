@@ -19,18 +19,19 @@ copies to review for cleanup. Runtime selection is client-specific and remains
 
 ## 60-second audit
 
-**Release candidate:** `0.5.1-rc.2` is available through the
+**Release candidate:** `0.5.1-rc.2` is available on
+[npm](https://www.npmjs.com/package/skillcrit/v/0.5.1-rc.2) and through the
 [GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
-Follow the [pilot guide](docs/pilot-guide.md) for checksum-verified installation.
-npm registry publication is still pending. To build from source:
+Requires Node 22+. Install the verified candidate and audit your project:
 
 ```bash
-git clone https://github.com/tangericm/skillcrit.git
-cd skillcrit
-npm ci
-npm run build
-node dist/cli.js doctor /path/to/your/project --user
+npm i -g skillcrit@0.5.1-rc.2
+skillcrit --version
+skillcrit doctor /path/to/your/project --user
 ```
+
+Omit `--user` to inspect only the project. For a disposable local installation
+or checksum-verified archive, follow the [pilot guide](docs/pilot-guide.md).
 
 ```
 # skillcrit doctor
@@ -64,13 +65,12 @@ and risk signals across all scanned copies. The example above is abbreviated.
 
 ## Install
 
-For this release candidate, use the [verified tarball](docs/pilot-guide.md) or
-build the checkout as above. To put that build on
-PATH, run `npm install -g .` from the built checkout and verify
-`skillcrit --version`. The plugin and agent-skill routes below require repository
-access and that separately installed CLI.
+Install the exact candidate shown above, or use `next` to follow the current
+prerelease. The [verified tarball](docs/pilot-guide.md) is also available.
+The plugin and agent-skill routes below require repository access and a
+separately installed CLI.
 
-**After npm publication** — the prerelease CLI on PATH:
+**Current prerelease CLI on PATH:**
 
 ```bash
 npm i -g skillcrit@next
@@ -103,8 +103,7 @@ Cursor 3.19.7 discovered one skill in the copied candidate; external symlinks
 were rejected by that client's plugin loader.
 
 All skill/plugin routes require the CLI separately; they install instructions,
-not a runnable CLI. Use the built checkout above (or `npm i -g skillcrit@next` after
-publication), then verify
+not a runnable CLI. Install `skillcrit@0.5.1-rc.2` or `skillcrit@next`, then verify
 `skillcrit --version` and `skillcrit doctor .` from the project to audit.
 An existing source checkout is an optional alternative: run `npm ci` and
 `npm run build` there, then invoke `node <checkout>/dist/cli.js doctor <project>`.
@@ -191,11 +190,10 @@ above 20 members get one summary with no pairwise details or cleanup ranking.
 Client-specific frontmatter controls are portability notes: preserve fields that
 the target client supports rather than moving operational controls into metadata.
 
-After npm publication, install a reviewed version in the repository you want
-to audit with `npm install --save-dev --save-exact skillcrit@<version>` and commit
-the package files. The workflow below uses that locally installed CLI. During
-the preview, a supplied, verified tarball can be used instead; the package is
-not yet available from the public npm registry.
+Install the reviewed candidate in the repository you want to audit with
+`npm install --save-dev --save-exact skillcrit@0.5.1-rc.2` and commit the package
+files. The workflow below uses that locally installed CLI. A checksum-verified
+GitHub tarball can also be used. This remains a prerelease.
 
 ```yaml
 name: audit skills

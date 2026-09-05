@@ -46,11 +46,12 @@ the user is reading it.
 
 Skill/plugin installation provides instructions only; the CLI is a separate prerequisite.
 Run `skillcrit --version`. If missing, explain that Node 22+ and
-the CLI are required. This is release candidate 0.5.1-rc.2; npm publication is
-still pending. A checksum-verified archive is available from the GitHub prerelease.
+the CLI are required. Release candidate 0.5.1-rc.2 is available on npm as
+`skillcrit@0.5.1-rc.2`; `skillcrit@next` follows the current prerelease.
+A checksum-verified archive is also available from the GitHub prerelease.
 With an authorized source checkout, build it using `npm ci` and `npm run build`,
 then use its `dist/cli.js` directly or install it with `npm install -g .`.
-After prerelease publication, `npm i -g skillcrit@next` is an alternative. Obtain approval before
+Alternatively, install `npm i -g skillcrit@0.5.1-rc.2`. Obtain approval before
 installing software; npm downloads packages. After installation, verify the
 version and run `skillcrit doctor .` from the project being audited.
 

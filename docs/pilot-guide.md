@@ -4,16 +4,28 @@ The pilot tests whether Skillcrit helps people maintain their real skill
 collections. Start with a project you know well. A useful outcome can be a
 confirmed issue, a clearer explanation, or evidence that the tool adds no value.
 
-Candidate: **`0.5.1-rc.2`**, distributed through the
+Candidate: **`0.5.1-rc.2`**, available on
+[npm](https://www.npmjs.com/package/skillcrit/v/0.5.1-rc.2) and through the
 [GitHub prerelease](https://github.com/tangericm/skillcrit/releases/tag/v0.5.1-rc.2).
-It is a prerelease, and npm registry publication is a separate step. Do not
-substitute the old unpatched `0.5.0` build.
+It remains a prerelease. Do not substitute the old unpatched `0.5.0` build.
 
 ## Install in a disposable directory
 
-Requires Node 22+ and npm. Download `skillcrit-0.5.1-rc.2.tgz` and `SHA256SUMS`
-from the same prerelease into a new empty folder. In that folder, verify the
-archive before installing:
+Requires Node 22+ and npm. In a new empty folder, install the exact candidate:
+
+```bash
+npm init -y
+npm install --save-dev --save-exact skillcrit@0.5.1-rc.2 --ignore-scripts
+node ./node_modules/skillcrit/dist/cli.js --version
+```
+
+The registry package integrity matches the verified GitHub archive; a clean
+registry installation passed all 16 simulations. See the release's
+`npm-verification.json` attachment for the publication addendum. The original
+package and verification attachments preserve their pre-publication record.
+
+Alternatively, download `skillcrit-0.5.1-rc.2.tgz` and `SHA256SUMS` from the same
+prerelease into a new empty folder. Verify the archive before installing:
 
 ```bash
 node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.5.1-rc.2.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
