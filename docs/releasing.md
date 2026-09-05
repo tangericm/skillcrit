@@ -82,7 +82,19 @@ npm view skillcrit@0.5.1-rc.2 version dist.integrity dist-tags --json
 Compare registry integrity with the retained package integrity. In another
 clean consumer project, install `skillcrit@0.5.1-rc.2`, repeat the version/audit
 smoke tests, then update installation status in the README. Do not advertise a
-registry install until it succeeds. Keep prereleases off npm's `latest` tag.
+registry install until it succeeds. Request `next` for prereleases and inspect
+all returned tags; do not assume the registry kept `latest` absent.
+
+On Skillcrit's initial publication, npm assigned both `next` and `latest` to
+`0.5.1-rc.2` despite the explicit `--tag next`. An authenticated attempt to
+remove `latest` returned HTTP 400. Yarn's [npm tag-removal implementation](https://github.com/yarnpkg/berry/blob/master/packages/plugin-npm-cli/sources/commands/npm/tag/remove.ts)
+also explicitly refuses to remove that tag. Do not repeat account approval
+merely to retry this rejected operation, or publish an unvalidated stable
+version to change the tag. Record the observed tags and recommend the explicit
+candidate version. An unqualified install currently selects the candidate;
+this does not waive the external pilot or stable-promotion criteria. Once a
+validated stable release exists, reserve `latest` for it and use `next` for
+subsequent candidates, verifying the registry state after each publication.
 
 For later CI publishing, configure an npm trusted publisher for the exact
 GitHub repository/workflow and use a supported npm CLI. Until that configuration
