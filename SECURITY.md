@@ -64,4 +64,12 @@ Open a security advisory on the repository:
 Please do not open a public issue for a vulnerability report. Include the
 version (`skillcrit --version`), the platform, and a minimal reproduction.
 
-Supported during the pilot: `0.5.1-rc.2`. No stable npm release is available yet.
+Supported during the pilot: `0.5.1-rc.3`. No stable npm release is available yet.
+
+### Cleanup export in older candidates
+
+Before `0.5.1-rc.3`, `lint --fix --out <file>` could overwrite an existing file,
+including a protected file reached through a symbolic link or hard link. The
+corrected exporter exclusively creates a new file and refuses existing paths.
+On older builds, use `--fix --out -` for stdout-only plans. Ordinary read-only
+audit commands are unaffected by this output-writing issue.

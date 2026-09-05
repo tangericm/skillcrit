@@ -399,7 +399,8 @@ came from, and a remediation line.
   skillcrit lint . --fix --out cleanup.md   dry-run keep/orphan plan
 
 --fix never deletes or edits a skill. It writes one markdown plan and refuses
-to overwrite SKILL.md, package.json, LICENSE or .env.
+to create SKILL.md, package.json, LICENSE or .env. Output must be a new file;
+existing files and links are refused. Use --out - for stdout only.
 
 Exit 1 means findings at or above the gate, not a crash.`,
 
@@ -462,10 +463,29 @@ const BLOCKED_OUT = new Set(["skill.md", "package.json", ".env", "license"]);
 function writeCleanupDoc(out: string | undefined, markdown: string): void {
   if (!out || out === "-") return;
   const resolved = path.resolve(out);
-  const base = path.basename(resolved).toLowerCase();
+  const basename = path.basename(resolved);
+  const base = (process.platform === "win32" ? basename.replace(/[. ]+$/u, "") : basename).toLowerCase();
+  if (process.platform === "win32") {
+    const withoutRoot = resolved.slice(path.parse(resolved).root.length);
+    if (withoutRoot.includes(":")) {
+      throw new Error("cleanup output must be a standalone file, not an NTFS alternate data stream");
+    }
+    if (/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(base)) {
+      throw new Error("cleanup output must be a file, not a reserved Windows device name");
+    }
+  }
   if (BLOCKED_OUT.has(base)) {
     throw new Error(`refusing to write cleanup doc over ${path.basename(resolved)}`);
   }
   fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  fs.writeFileSync(resolved, markdown);
+  try {
+    // Exclusive creation rejects existing files and link aliases without a
+    // check-then-write race. Reports can contain private paths and excerpts.
+    fs.writeFileSync(resolved, markdown, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      throw new Error(`cleanup output already exists: ${resolved}; choose a new path or use --out -`);
+    }
+    throw error;
+  }
 }

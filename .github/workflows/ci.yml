@@ -32,7 +32,7 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      - run: npm run simulate
+      - run: npm run verify:package
 
   selflint:
     name: skillcrit lints itself
