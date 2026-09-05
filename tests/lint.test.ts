@@ -138,6 +138,7 @@ describe("lint", () => {
         skillFile: "/tmp/b/SKILL.md",
         description: "v2 csv",
         body: "body-b",
+        hash: "body-b-file",
         pack: "pack-b",
         version: "2.0.0",
         origin: "user"
@@ -223,6 +224,7 @@ describe("lint", () => {
         skillFile: "/tmp/old/SKILL.md",
         description: "older csv",
         body: "body-old",
+        hash: "body-old-file",
         version: "1.101.0"
       },
       base

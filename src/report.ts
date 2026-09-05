@@ -31,7 +31,9 @@ export function formatMarkdown(report: LintReport): string {
     "# skillcrit lint",
     "",
     coverageWarning(report).trim(),
-    `${report.unique} unique / ${report.scanned} scanned — ~${report.tokens.alwaysOnNow} always-loaded tokens`,
+    "Runtime selection: unknown",
+    ...(report.limitations ?? ["Token totals estimate a hypothetical set; client loading has not been verified."]),
+    `${report.unique} unique / ${report.scanned} scanned — ~${report.tokens.alwaysOnNow} estimated tokens for a hypothetical set`,
     ""
   ];
   if (report.findings.length === 0) {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import matter from "gray-matter";
 import { readInventoryText } from "./read.js";
-import { DEFAULT_CONFIG, matchesIgnore, type SkillcritConfig } from "./config.js";
+import { DEFAULT_CONFIG, matchesIgnore, matchesIgnoredDirectory, type SkillcritConfig } from "./config.js";
 import { detectOrigin } from "./origin.js";
 import { collectRoots } from "./roots.js";
 import { RULES, type RuleId } from "./rules.js";
@@ -94,7 +94,7 @@ export function scan(root: string, options: ScanOptions = {}): SkillRecord[] {
   };
   let n = 0;
   for (const dir of collectRoots(root, options.extraRoots ?? [], options.user)) {
-    walkSkillFiles(dir, files, dir, seenReal, budget, 0, () => {
+    walkSkillFiles(dir, files, dir, seenReal, budget, config.ignore, 0, () => {
       n += 1;
       options.onProgress?.(n);
     });
@@ -124,9 +124,11 @@ function walkSkillFiles(
   walkRoot: string,
   seenReal: Set<string>,
   budget: WalkBudget,
+  ignore: string[],
   depth: number,
   onFile: () => void
 ): void {
+  if (matchesIgnoredDirectory(dir, ignore)) return;
   let real: string;
   try {
     if (!fs.existsSync(dir)) return;
@@ -135,6 +137,7 @@ function walkSkillFiles(
     budget.reasons.add(`could not resolve directory: ${dir}`);
     return;
   }
+  if (matchesIgnoredDirectory(real, ignore)) return;
   let stat: fs.Stats;
   try {
     stat = fs.statSync(real);
@@ -166,6 +169,7 @@ function walkSkillFiles(
     const full = path.join(real, entry.name);
     if (SKIP_DIRS.has(entry.name)) continue;
     if (entry.name === "SKILL.md") {
+      if (matchesIgnore(full, ignore)) continue;
       try {
         const resolved = fs.realpathSync(full);
         if (!isInsideRoot(resolved, walkRoot)) continue;
@@ -181,7 +185,7 @@ function walkSkillFiles(
       continue;
     }
     if (entry.isDirectory() || entry.isSymbolicLink()) {
-      walkSkillFiles(full, out, walkRoot, seenReal, budget, depth + 1, onFile);
+      walkSkillFiles(full, out, walkRoot, seenReal, budget, ignore, depth + 1, onFile);
     }
   }
 }
@@ -330,7 +334,7 @@ function parseSkill(
     config
   });
   const risks = withRisks
-    ? collectRisks(skillDir, body, data, bodyLineOffset(raw, body), incomplete)
+    ? collectRisks(skillDir, body, data, bodyLineOffset(raw, body), incomplete, config.ignore)
     : [];
 
   return {
@@ -375,9 +379,10 @@ function collectRisks(
   body: string,
   data: Record<string, unknown>,
   offset: number,
-  incomplete: (reason: string) => void
+  incomplete: (reason: string) => void,
+  ignore: string[]
 ): RiskFinding[] {
-  const risks = scanRisks(skillDir, body, offset, incomplete);
+  const risks = scanRisks(skillDir, body, offset, incomplete, ignore);
   const allowed = data["allowed-tools"];
   if (typeof allowed === "string") {
     const broad = allowedToolsRisk(allowed);

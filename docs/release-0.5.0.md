@@ -1,5 +1,10 @@
 # v0.5.0 release checklist
 
+Historical checklist for the unpublished 0.5.0 preview. The current source
+version is `0.5.1-dev.0`, which includes security and correctness fixes. Do not
+publish the unpatched 0.5.0 candidate; use the current changelog and verify a
+new release candidate before any npm publication.
+
 This is a private preview. Do not present npm installation as available until
 the package has been published and its registry install has been verified.
 

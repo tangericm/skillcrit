@@ -6,7 +6,7 @@ compatibility: Requires Node 22+ and the skillcrit CLI reachable as a process.
 metadata:
   author: Eric Tang
   repo: https://github.com/tangericm/skillcrit
-  version: "0.5.0"
+  version: "0.5.1-dev.0"
 ---
 
 # skillcrit
@@ -46,7 +46,7 @@ the user is reading it.
 
 Skill/plugin installation provides instructions only; the CLI is a separate prerequisite.
 Run `skillcrit --version`. If missing, explain that Node 22+ and
-the CLI are required. This is a private preview, not yet published to npm.
+the CLI are required. This is a development preview, not yet published to npm.
 With an authorized source checkout, build it using `npm ci` and `npm run build`,
 then use its `dist/cli.js` directly or install it with `npm install -g .`.
 After publication, `npm i -g skillcrit` is an alternative. Obtain approval before
@@ -63,7 +63,8 @@ unless that checkout is the project the user has open.
 ## Reading the output
 
 - Exit 1 means findings at or above the gate. It is a result, not a crash.
-  Exit 2 is bad usage, exit 3 means skillcrit could not run.
+  Exit 2 is bad usage; exit 3 means the run failed or scan coverage is incomplete.
+  Check `coverage.complete` and its reasons before treating a report as complete.
 - Progress goes to stderr and only on a TTY. Everything you report is on
   stdout.
 - Every finding carries a stable rule ID (`SC1002`, `SC4003`), a `file:line`,

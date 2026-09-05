@@ -44,7 +44,9 @@ const STOP = new Set([
 ]);
 
 function identityKey(skill: SkillRecord): string {
-  return `${skill.name}\n${skill.description}\n${skill.body}`;
+  // Include all frontmatter, including client controls. Matching bodies alone
+  // cannot establish identical instructions or equivalent permissions.
+  return `${skill.name}\n${skill.hash}`;
 }
 
 export function lint(
@@ -103,13 +105,13 @@ export function lint(
       : skill.descriptionTokens;
     if (skill.alwaysOn) {
       const why = skill.hooks
-        ? "plugin hooks stay loaded"
+        ? "plugin declares hooks"
         : "always-on body phrasing";
       const finding = emit(
         "SC2003",
         "always-on",
         [skill.name],
-        `${skill.name} is always-on (${why}); ~${skill.alwaysOnTokens} tokens`,
+        `${skill.name} has an always-on signal (${why}); ~${skill.alwaysOnTokens} estimated tokens if its body is loaded`,
         { file: skill.skillFile }
       );
       if (finding) findings.push(finding);
@@ -123,8 +125,8 @@ export function lint(
     "always-loaded-tokens",
     unique.map((s) => s.name),
     overBudget
-      ? `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned) — over the configured budget of ${budget}`
-      : `~${alwaysOnTokens} always-loaded tokens across ${unique.length} unique skills (${skills.length} scanned)`,
+      ? `~${alwaysOnTokens} estimated tokens for the hypothetical set of ${unique.length} unique instruction files (${skills.length} scanned) — over the configured budget of ${budget}`
+      : `~${alwaysOnTokens} estimated tokens for the hypothetical set of ${unique.length} unique instruction files (${skills.length} scanned)`,
     {},
     overBudget ? "warning" : undefined
   );
@@ -132,6 +134,12 @@ export function lint(
 
   return {
     root,
+    runtimeResolution: "unknown",
+    limitations: [
+      "Cleanup ranking is not runtime precedence. Verify client namespaces, enablement and validity before removing a copy.",
+      "Identical instructions means equal SKILL.md bytes; scripts, references and other package files may differ.",
+      "Token totals and savings estimate a hypothetical set, not a measured session. Hooks and body phrasing do not prove loading."
+    ],
     findings,
     cleanup,
     questions: cleanupQuestions(cleanup),
@@ -196,7 +204,7 @@ function duplicateCopies(
       // unreadable in a terminal.
       extrasAreMirrors
         ? `${keep.name} has ${n} identical instruction ${copyWord} (cache/marketplace); keeping the ${keep.origin} copy`
-        : `${keep.name} is installed at ${ranked.length} paths — organize to one copy, keeping the ${keep.origin} one`,
+        : `${keep.name} has identical instruction files at ${ranked.length} paths — review supporting files and client usage before cleanup`,
       {
         file: keep.skillFile,
         keep: keep.skillFile,
@@ -266,7 +274,7 @@ function versionConflicts(
         "pick-version",
         [keep],
         drop,
-        `multiple versions of ${name}; disable or remove older/lower-rank copies`,
+        `alternative instruction files or metadata for ${name}; verify client namespaces, permissions and supporting files before changing any copy`,
         true
       )
     );
@@ -330,7 +338,7 @@ function contentionClusters(
         "prefer-skill",
         keep,
         drop,
-        `overlapping triggers; keep ${keep.map(labelSkill).join(", ")} enabled and consider disabling the rest`,
+        `shared trigger phrases; compare intended tasks and measure client triggering before changing any skill`,
         true
       )
     );
@@ -443,6 +451,7 @@ export function cleanupPlan(report: LintReport): string {
     "# skillcrit cleanup",
     "",
     "Dry-run. No skill files were deleted or modified.",
+    "Runtime selection: unknown. Cleanup ranking and token estimates do not establish what a client loads.",
     "",
     `${report.unique} unique / ${report.scanned} scanned`,
     ""
@@ -463,11 +472,7 @@ export function cleanupPlan(report: LintReport): string {
     }
     lines.push("");
     if (action.orphans.length > 0) {
-      const verb =
-        action.kind === "ignore-mirror"
-          ? "optional ignore/delete"
-          : "delete or disable";
-      lines.push(`**Orphans** (${verb})`);
+      lines.push("**Alternatives** (review supporting files and client usage before changes)");
       lines.push("");
       for (const orphan of action.orphans) {
         lines.push(`- \`${displayPath(orphan.dir, report.root)}\` — ${orphan.why}`);
@@ -475,14 +480,16 @@ export function cleanupPlan(report: LintReport): string {
       lines.push("");
     }
   }
-  if (spec.length > 0) {
-    lines.push("## Spec errors");
-    lines.push("");
-    lines.push("**Orphans** (fix or delete)");
-    lines.push("");
-    for (const finding of spec) {
+  for (const [title, findings] of [
+    ["Spec findings to review", spec.filter(f => f.severity !== "info")],
+    ["Informational notes", spec.filter(f => f.severity === "info")]
+  ] as const) {
+    if (findings.length === 0) continue;
+    lines.push(`## ${title}`, "");
+    for (const finding of findings) {
       const dir = finding.keep ?? finding.skills[0];
-      lines.push(`- \`${displayPath(dir, report.root)}\` — ${finding.id} ${finding.message}`);
+      lines.push(`- \`${displayPath(dir, report.root)}\` — ${finding.severity} ${finding.id} ${finding.message}`);
+      if (finding.remediation) lines.push(`  ${finding.remediation}`);
     }
     lines.push("");
   }
@@ -556,7 +563,6 @@ function orphanWhy(
     } else if (drop.version && keep.version && drop.version !== keep.version) {
       bits.push(`${dropVer} vs keep ${formatVer(keep.origin, keep.version)}`);
     }
-    if (drop.specIssues[0]) bits.push(drop.specIssues[0]);
     return bits.join("; ") || dropVer;
   }
   return `overlapping triggers; ${dropVer}, lower rank than ${keep.name}`;

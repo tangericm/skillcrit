@@ -22,8 +22,9 @@ and write to stdout. Evaluation has a separate execution boundary below.
 Skill content is treated as data during inventory: skillcrit parses SKILL.md
 without executing its instructions or scripts.
 Only untagged `---` YAML frontmatter is accepted; engine selectors such as
-`---js` are rejected before parsing. This fixes an execution boundary violation
-in 0.5.0; do not use the unpatched version to scan untrusted skills.
+`---js` are rejected before parsing. The `0.5.1-dev.0` development preview fixes
+an execution boundary violation in 0.5.0; do not use unpatched 0.5.0 builds to
+scan untrusted skills.
 
 `eval` creates and deletes temporary workspaces and executes task test commands.
 It uses bundled tasks by default, but `--tasks` accepts a custom directory whose

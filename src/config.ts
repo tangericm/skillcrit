@@ -167,6 +167,16 @@ export function matchesIgnore(file: string, patterns: string[]): boolean {
   return patterns.some((pattern) => globToRegExp(pattern).test(target));
 }
 
+/** Only a subtree glob permits pruning; a file glob must not hide siblings. */
+export function matchesIgnoredDirectory(dir: string, patterns: string[]): boolean {
+  return patterns.some(pattern => {
+    const normalized = pattern.replace(/\\/g, "/");
+    if (normalized === "**") return true;
+    if (!normalized.endsWith("/**")) return false;
+    return matchesIgnore(dir, [normalized, normalized.slice(0, -3)]);
+  });
+}
+
 const globCache = new Map<string, RegExp>();
 
 const REGEX_META = /[.+^${}()|[\]\\]/g;

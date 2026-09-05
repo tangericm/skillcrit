@@ -119,6 +119,7 @@ export type CleanupQuestion = {
 export type TokenComparison = {
   scanned: number;
   unique: number;
+  /** Legacy name: a hypothetical inventory estimate, not observed usage. */
   alwaysOnNow: number;
   afterCleanup: number;
   saved: number;
@@ -126,6 +127,9 @@ export type TokenComparison = {
 };
 
 export type LintReport = {
+  /** Present on new reports; optional for callers rendering older reports. */
+  runtimeResolution?: "unknown";
+  limitations?: string[];
   coverage?: ScanCoverage;
   /**
    * Scanned root, when the caller knew one. Renderers print paths relative to

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1-dev.0 (unpublished development preview)
 
 ### Security
 
@@ -25,13 +25,23 @@
 
 ### Fixed
 
+- Keep informational client-control notes separate from actionable spec
+  findings in cleanup plans; report severities and preserve remediation advice.
+- Compare complete SKILL.md bytes in lint duplicate detection, retaining
+  differences in tool permissions and other operational frontmatter.
+- Prune ignored subtrees before traversal limits, including separately
+  discovered client roots; retain coverage failures for unignored input.
+- Label lint context costs and cleanup ranking as estimates with unknown
+  runtime selection, and correct unsupported runtime claims in remediation.
+- Use the consuming repository's installed CLI in the README CI example.
 - Malformed metadata and non-directory command entries report incomplete
   coverage without discarding otherwise readable skill records.
 - Unexpected CLI failures use exit 3 rather than the findings exit code.
 
 Migration: scripts that tolerated invalid config or assumed empty/partial scans
 were successful must handle exit 3. Non-lint commands accept text/JSON only.
-These contract changes remain unreleased; no package version or tag was changed.
+The development version distinguishes these fixes from unpatched 0.5.0 builds.
+No npm package or release tag has been published for this preview.
 
 ## 0.5.0
 

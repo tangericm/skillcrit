@@ -230,7 +230,7 @@ describe("lint --fix never deletes or rewrites user files", () => {
     const result = await runCli(["lint", project, "--fix", "--out", out]);
     expect(result.stdout).toMatch(/Dry-run\. No skill files were deleted/);
     expect(result.stdout).toMatch(/\*\*Keep\*\*/);
-    expect(result.stdout).toMatch(/\*\*Orphans\*\*/);
+    expect(result.stdout).toMatch(/\*\*Alternatives\*\*/);
     const after = snapshot(project);
     expect(after.files.filter((f) => f !== "skillcrit-cleanup.md").sort()).toEqual(
       before.files
