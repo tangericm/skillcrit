@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 import { formatAdapters, resolveAdapter } from "./adapters/index.js";
 import { loadConfig, type SkillcritConfig } from "./config.js";
 import { doctor, formatDoctor } from "./doctor.js";
@@ -20,6 +19,10 @@ import { scan } from "./scan.js";
 import { formatSummary } from "./summary.js";
 import type { LintReport, ScanCoverage, Severity } from "./types.js";
 import { packageVersion } from "./version.js";
+import { applyDismissals, compareBaseline, createBaseline, createDismissals, historyContext, readBaseline, readDismissals, serializeHistory } from "./history.js";
+import { writeNewFile } from "./write.js";
+import { formatSetup, setupDiagnostics } from "./setup.js";
+import { prioritizeFindings } from "./report.js";
 
 /**
  * Exit codes are part of the contract; CI scripts branch on them.
@@ -75,6 +78,23 @@ async function runMain(argv: string[]): Promise<number> {
     process.stderr.write("--fix requires lint with --format text\n");
     return EXIT.usage;
   }
+  const historyFlags = parsed.baseline || parsed.saveBaseline;
+  if ((historyFlags && command !== "lint") || (parsed.dismissals && command !== "lint" && command !== "dismiss") ||
+      ((parsed.finding || parsed.reason) && command !== "dismiss") || (parsed.expectVersion && command !== "setup") ||
+      (parsed.compareFiles && command !== "doctor" && command !== "inspect")) {
+    process.stderr.write("maintenance option is not supported by this command; see skillcrit help <command>\n");
+    return EXIT.usage;
+  }
+  if (command === "dismiss") {
+    if (!target || !parsed.finding || !parsed.reason?.trim() || parsed.out === "-" || user || parsed.config || parsed.failOn) {
+      process.stderr.write("skillcrit dismiss <baseline.json> --finding <fingerprint> --reason <reason> --out <new-file>\n");
+      return EXIT.usage;
+    }
+    const result = createDismissals(readBaseline(target), parsed.finding, parsed.reason, parsed.dismissals ? readDismissals(parsed.dismissals) : undefined);
+    writeNewFile(parsed.out, serializeHistory(result));
+    process.stdout.write(format === "json" ? JSON.stringify(result, null, 2) + "\n" : `Dismissal saved to ${parsed.out}\n`);
+    return EXIT.ok;
+  }
   if (command === "rules") {
     process.stdout.write(format === "json" ? rulesJson() : rulesTable());
     return EXIT.ok;
@@ -126,6 +146,14 @@ async function runMain(argv: string[]): Promise<number> {
     });
   };
 
+  if (command === "setup") {
+    const skills = runScan(false);
+    const report = setupDiagnostics(root, skills.length, coverage, parsed.expectVersion, user);
+    progress.done(`setup: ${skills.length} skills found; runtime unknown`);
+    process.stdout.write(format === "json" ? JSON.stringify(report, null, 2) + "\n" : formatSetup(report));
+    return coverage.complete && report.versionMatches !== false ? EXIT.ok : EXIT.error;
+  }
+
   if (command === "scan") {
     const skills = runScan(false);
     progress.done(`scanned ${skills.length} skills`);
@@ -147,7 +175,15 @@ async function runMain(argv: string[]): Promise<number> {
   if (command === "doctor" || command === "inspect") {
     const skills = runScan(true);
     progress.phase("resolve");
-    const report = doctor(skills, root, { user });
+    const report = doctor(skills, root, { user, compareFiles: parsed.compareFiles, ignore: config.ignore });
+    for (const row of report.recommendations) {
+      for (const comparison of row.fileComparisons ?? []) {
+        if (!comparison.complete) {
+          coverage.complete = false;
+          coverage.reasons.push(`incomplete supporting-file comparison: ${comparison.left} / ${comparison.right}`);
+        }
+      }
+    }
     progress.done(
       `${report.recommendations.length} recommendations / ${report.alternatives} alternatives; runtime unknown`
     );
@@ -164,6 +200,12 @@ async function runMain(argv: string[]): Promise<number> {
     progress.phase("lint");
     const report = lint(skills, config, root);
     report.coverage = coverage;
+    report.findings = prioritizeFindings(report.findings);
+    const context = historyContext(root, config, user);
+    const snapshot = createBaseline(report, skills, context);
+    if (parsed.baseline) report.comparison = compareBaseline(snapshot, readBaseline(parsed.baseline));
+    if (parsed.dismissals) applyDismissals(report, context, readDismissals(parsed.dismissals));
+    if (parsed.saveBaseline) writeNewFile(parsed.saveBaseline, serializeHistory(snapshot));
     progress.done(
       `${report.unique} unique / ${report.scanned} scanned  ~${report.tokens.alwaysOnNow} tok`
     );
@@ -172,9 +214,11 @@ async function runMain(argv: string[]): Promise<number> {
         process.stdout.write(renderLint(report, format));
         return EXIT.error;
       }
+      const includesHistory = parsed.baseline || parsed.saveBaseline || parsed.dismissals;
+      if (includesHistory) process.stdout.write(renderLint(report, format));
       const md = cleanupPlan(report);
       process.stdout.write(md);
-      process.stdout.write(formatSummary(report));
+      if (!includesHistory) process.stdout.write(formatSummary(report));
       try {
         writeCleanupDoc(parsed.out, md);
       } catch (err) {
@@ -245,7 +289,7 @@ function renderLint(report: LintReport, format: Format): string {
 function gate(report: LintReport, failOn: Severity): number {
   const threshold = SEVERITY_ORDER[failOn];
   const blocking = report.findings.filter(
-    (f) => SEVERITY_ORDER[f.severity] >= threshold
+    (f) => !f.dismissal && SEVERITY_ORDER[f.severity] >= threshold
   );
   return blocking.length > 0 ? EXIT.findings : EXIT.ok;
 }
@@ -257,7 +301,8 @@ const FLAGS = new Set([
   "-h",
   "--version",
   "-V",
-  "--fix"
+  "--fix",
+  "--compare-files"
 ]);
 const OPTIONS = new Set([
   "--tasks",
@@ -266,7 +311,13 @@ const OPTIONS = new Set([
   "--format",
   "--fail-on",
   "--config",
-  "--repeat"
+  "--repeat",
+  "--baseline",
+  "--save-baseline",
+  "--dismissals",
+  "--finding",
+  "--reason",
+  "--expect-version"
 ]);
 const SEVERITIES = new Set(["error", "warning", "info"]);
 
@@ -322,6 +373,13 @@ function parseArgs(argv: string[]) {
     failOn: failOn as Severity | undefined,
     config: kv.get("--config"),
     repeat,
+    baseline: kv.get("--baseline"),
+    saveBaseline: kv.get("--save-baseline"),
+    dismissals: kv.get("--dismissals"),
+    finding: kv.get("--finding"),
+    reason: kv.get("--reason"),
+    expectVersion: kv.get("--expect-version"),
+    compareFiles: flags.has("--compare-files"),
     out:
       kv.get("--out") ??
       (flags.has("--fix") && !flags.has("--json") ? "skillcrit-cleanup.md" : "-"),
@@ -330,7 +388,7 @@ function parseArgs(argv: string[]) {
   };
 }
 
-const COMMANDS = new Set(["roots", "scan", "doctor", "inspect", "lint", "eval", "rules"]);
+const COMMANDS = new Set(["roots", "scan", "doctor", "inspect", "lint", "eval", "rules", "dismiss", "setup"]);
 
 function positionalHelpTopic(
   command: string | undefined,
@@ -349,6 +407,8 @@ function usage(): string {
   skillcrit roots  [path]            skill/plugin locations per harness
   skillcrit eval   <pack> [--agent]  pack on vs off (experimental)
   skillcrit rules                    the rule catalogue and default severities
+  skillcrit setup [path]             CLI/runtime and discovered-location diagnostics
+  skillcrit dismiss <baseline>       accept one exact finding with a reason
 
 Common flags
   --user                also read the documented $HOME skill roots
@@ -368,12 +428,12 @@ Audit with an installed CLI
   skillcrit doctor . --user
 
 Installation instructions and current release status
-  https://github.com/tangericm/skillcrit#install
+  https://github.com/tangericm/skillcrit#quickstart
 `;
 }
 
 const HELP: Record<string, string> = {
-  doctor: `skillcrit doctor [path] [--user] [--format text|json]
+  doctor: `skillcrit doctor [path] [--user] [--compare-files] [--format text|json]
 
 Recommend a copy per skill name for cleanup review. Runtime selection is unknown:
 client namespaces and enablement are not resolved. Token counts estimate the
@@ -381,6 +441,13 @@ recommended set; risk inventory covers all scanned copies.
 
   skillcrit doctor . --user
   skillcrit doctor . --user --json > estate.json
+  skillcrit doctor . --compare-files
+
+--compare-files compares each alternative against the recommended copy: regular
+file bytes and POSIX permissions, up to 128 files, 1,024 entries, depth 3,
+512 KiB per file and 8 MiB per copy. Skipped/ignored content and symlinks remain
+unknown; incomplete comparison exits 3. Equal inspected files do not prove
+runtime equivalence and are not a deletion recommendation.
 
 \`inspect\` is an alias. Exits 0 for a complete report, 3 for failed/incomplete input.`,
 
@@ -402,7 +469,52 @@ came from, and a remediation line.
 to create SKILL.md, package.json, LICENSE or .env. Output must be a new file;
 existing files and links are refused. Use --out - for stdout only.
 
+Maintenance flow (every output must be a new file):
+  skillcrit lint . --save-baseline baseline.json
+  skillcrit lint . --baseline baseline.json
+  skillcrit lint . --json > findings.json
+
+Text prints a finding fingerprint below each finding; JSON exposes
+findings[].fingerprint. Copy its complete 64-character value for dismissal:
+  skillcrit dismiss baseline.json --finding <fingerprint> --reason "Reviewed and accepted" --out dismissals.json
+  skillcrit lint . --baseline baseline.json --dismissals dismissals.json
+
+Baseline comparison lists new, changed, unchanged and resolved findings.
+Missing findings remain unverified when either scan is incomplete. Baselines
+must match the CLI version, project/user scope and effective rules/budgets/ignores.
+Relocated project clones compare using relative paths when no ignores are set.
+With ignore patterns, scan-root locations and spellings must also match because
+globs can match absolute ancestors. Save a fresh baseline after moving the scan.
+External paths remain exact.
+Comparison does not change the gate: all active findings count. Dismissed findings
+remain visible with their reasons, and changed source evidence makes them active
+again. Stale dismissals are listed. History files are bounded, validated JSON.
+
 Exit 1 means findings at or above the gate, not a crash.`,
+
+  dismiss: `skillcrit dismiss <baseline.json> --finding <fingerprint> --reason <text> --out <new-file>
+                    [--dismissals <existing-file>] [--json]
+
+Create a reasoned dismissal for exactly one fingerprint saved in a baseline.
+First run: skillcrit lint . --save-baseline baseline.json
+Copy the 64-character finding fingerprint from its text output, or inspect
+findings[].fingerprint in the baseline JSON. Then run:
+  skillcrit dismiss baseline.json --finding <fingerprint> --reason "Reviewed scratch cleanup" --out dismissals.json
+  skillcrit lint . --dismissals dismissals.json
+
+To carry existing entries forward, add --dismissals dismissals.json and choose
+a new --out path. Files and links are never replaced; reasons cannot be empty.
+A dismissal applies only with the same version, scan scope, config and exact
+fingerprint. Changed source evidence resurfaces and leaves the old entry stale.`,
+
+  setup: `skillcrit setup [path] [--user] [--expect-version <version>] [--json]
+
+Report the CLI version/location, Node runtime, requested scan scope, discovered
+locations and skill count. Filesystem discovery does not prove client loading
+or plugin enablement. No skills is a visible diagnostic, not a scan failure.
+  skillcrit setup . --user
+  skillcrit setup . --expect-version ${packageVersion()}
+An explicit version mismatch or incomplete scan exits 3.`,
 
   scan: `skillcrit scan [path] [--user] [--json]
 
@@ -458,39 +570,6 @@ function rulesJson(): string {
   return JSON.stringify({ rules: ruleIds().map((id) => RULES[id]) }, null, 2) + "\n";
 }
 
-const BLOCKED_OUT = new Set(["skill.md", "package.json", ".env", "license"]);
-
 function writeCleanupDoc(out: string | undefined, markdown: string): void {
-  if (!out || out === "-") return;
-  const resolved = path.resolve(out);
-  const basename = path.basename(resolved);
-  const base = (process.platform === "win32" ? basename.replace(/[. ]+$/u, "") : basename).toLowerCase();
-  if (process.platform === "win32") {
-    const withoutRoot = resolved.slice(path.parse(resolved).root.length);
-    if (withoutRoot.includes(":")) {
-      throw new Error("cleanup output must be a standalone file, not an NTFS alternate data stream");
-    }
-    if (/^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³])(?:\.|$)/iu.test(base)) {
-      throw new Error("cleanup output must be a file, not a reserved Windows device name");
-    }
-  }
-  if (BLOCKED_OUT.has(base)) {
-    throw new Error(`refusing to write cleanup doc over ${path.basename(resolved)}`);
-  }
-  fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  const staging = fs.mkdtempSync(path.join(path.dirname(resolved), ".skillcrit-report-"));
-  try {
-    const staged = path.join(staging, "report.md");
-    fs.writeFileSync(staged, markdown, { flag: "wx", mode: 0o600 });
-    // Publish a completed file without following or replacing the destination.
-    // Windows exclusive-open can follow dangling links; link creation cannot.
-    fs.linkSync(staged, resolved);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-      throw new Error(`cleanup output already exists: ${resolved}; choose a new path or use --out -`);
-    }
-    throw new Error(`could not safely create cleanup output: ${String(error)}; use --out - for stdout`);
-  } finally {
-    fs.rmSync(staging, { recursive: true, force: true });
-  }
+  if (out && out !== "-") writeNewFile(out, markdown, "cleanup");
 }

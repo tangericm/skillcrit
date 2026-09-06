@@ -39,3 +39,10 @@ export {
 export type { Format } from "./report.js";
 export { EXIT, main } from "./command.js";
 export type * from "./types.js";
+
+export { createBaseline, compareBaseline, historyContext, createDismissals, applyDismissals, readBaseline, readDismissals, serializeHistory, MAX_HISTORY_BYTES } from "./history.js";
+export type { Baseline, BaselineComparison, SnapshotFinding, HistoryContext, HistoryScanOptions, Dismissal, DismissalFile } from "./history.js";
+export { compareSkillFiles, FILE_COMPARISON_LIMITS } from "./compare-files.js";
+export type { FileComparison } from "./compare-files.js";
+export { setupDiagnostics, formatSetup } from "./setup.js";
+export { prioritizeFindings } from "./report.js";

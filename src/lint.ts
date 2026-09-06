@@ -89,7 +89,7 @@ export function lint(
         "risk",
         [skill.name],
         `${skill.name}: ${RULES[risk.id].title} — \`${risk.evidence}\``,
-        { file: path.join(skill.skillDir, risk.file), line: risk.line }
+        { file: path.join(skill.skillDir, risk.file), line: risk.line, evidenceHash: risk.evidenceHash }
       );
       if (finding) findings.push(finding);
     }
@@ -155,7 +155,7 @@ type Emit = (
   rule: LintRule,
   skills: string[],
   message: string,
-  extra?: { file?: string; line?: number | null; keep?: string; drop?: string[] },
+  extra?: { file?: string; line?: number | null; keep?: string; drop?: string[]; relatedFiles?: string[]; evidenceHash?: string },
   severityOverride?: LintFinding["severity"]
 ) => LintFinding | null;
 
@@ -208,7 +208,8 @@ function duplicateCopies(
       {
         file: keep.skillFile,
         keep: keep.skillFile,
-        drop: drop.map((s) => s.skillFile)
+        drop: drop.map((s) => s.skillFile),
+        relatedFiles: ranked.map(s => s.skillFile)
       },
       extrasAreMirrors ? "info" : undefined
     );
@@ -265,7 +266,8 @@ function versionConflicts(
       {
         file: keep.skillFile,
         keep: keep.skillFile,
-        drop: drop.map((s) => s.skillFile)
+        drop: drop.map((s) => s.skillFile),
+        relatedFiles: ranked.map(s => s.skillFile)
       }
     );
     if (finding) findings.push(finding);
@@ -296,7 +298,7 @@ function contentionClusters(
     if (members.length > 20) {
       const summary = emit("SC3003", "contention", members.map(s => s.name),
         `${members.length} skills share trigger phrases (heuristic). Review this cluster; pair details and cleanup ranking omitted above 20 members.`,
-        { file: members[0].skillFile });
+        { file: members[0].skillFile, relatedFiles: members.map(s => s.skillFile) });
       if (summary) findings.push(summary);
       continue;
     }
@@ -313,7 +315,8 @@ function contentionClusters(
       {
         file: keep[0].skillFile,
         keep: keep[0].skillFile,
-        drop: drop.map((s) => s.skillFile)
+        drop: drop.map((s) => s.skillFile),
+        relatedFiles: ranked.map(s => s.skillFile)
       }
     );
     if (cluster) findings.push(cluster);
@@ -327,7 +330,7 @@ function contentionClusters(
           "trigger-overlap",
           [members[i].name, members[j].name],
           `${members[i].name} / ${members[j].name} share “${shared[0]}”`,
-          { file: members[i].skillFile }
+          { file: members[i].skillFile, relatedFiles: [members[i].skillFile, members[j].skillFile] }
         );
         if (overlap) findings.push(overlap);
       }
@@ -432,7 +435,7 @@ function duplicateCommands(skills: SkillRecord[], emit: Emit): LintFinding[] {
       "duplicate-command",
       [...packs].sort(),
       `/${command} is registered by ${[...packs].sort().join(" and ")}`,
-      { file: where.get(command) }
+      { file: where.get(command), relatedFiles: skills.filter(s => s.commands.includes(command)).map(s => s.skillFile) }
     );
     if (finding) findings.push(finding);
   }

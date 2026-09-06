@@ -5,7 +5,7 @@ resolve runtime precedence, or measure whether a skill improves an agent's work.
 
 ## Verified surfaces
 
-Historical observations recorded September 4–5, 2026. Current release: `0.5.2`.
+Historical observations recorded September 4–5, 2026. Current release: `0.6.0`.
 The previous GitHub releases and source-linked verification
 records were withdrawn after the [history cleanup](history-cleanup.md). The
 observations below describe those earlier trials, not a newly released artifact.
@@ -36,8 +36,8 @@ new plan, and retaining exit 3 plus coverage reasons for an oversized helper.
 File hashes confirmed only the requested new plan changed the fixture.
 These tests used RC4; the stable version changes packaging metadata and release
 guidance, with final stable-archive checks recorded separately.
-See the [release verification guide](verification.md) for fresh 0.5.2 package
-checks. The native-client observations above were not rerun for 0.5.2.
+See the [release verification guide](verification.md) for versioned package
+checks. The native-client observations above were not rerun for 0.6.0.
 
 ## Inventory coverage is different from client discovery
 

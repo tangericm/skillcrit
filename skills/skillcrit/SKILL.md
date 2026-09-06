@@ -6,7 +6,7 @@ compatibility: Requires Node 22+ and the skillcrit CLI reachable as a process.
 metadata:
   author: Eric Tang
   repo: https://github.com/tangericm/skillcrit
-  version: "0.5.2"
+  version: "0.6.0"
 ---
 
 # skillcrit
@@ -47,8 +47,8 @@ the user is reading it.
 Skill/plugin installation provides instructions only; the CLI is a separate prerequisite.
 Run `skillcrit --version`. If missing, explain that Node 22+ and
 the CLI are required. Install the current release with
-`npm install -g skillcrit@0.5.2 --ignore-scripts`.
-Version 0.5.2 is distributed through npm and GitHub. Verify the
+`npm install -g skillcrit@0.6.0 --ignore-scripts`.
+Version 0.6.0 is distributed through npm and GitHub. Verify the
 installed version before auditing. Do not substitute an older build for file export.
 With an authorized source checkout, build it using `npm ci` and `npm run build`,
 then use its `dist/cli.js` directly or install it with `npm install -g .`.

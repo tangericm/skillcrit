@@ -1,4 +1,5 @@
 import path from "node:path";
+import { compareSkillFiles } from "./compare-files.js";
 import { compareSkills, compareVersions, labelSkill } from "./origin.js";
 import { displayPath } from "./paths.js";
 import { listSkillLocations } from "./roots.js";
@@ -13,7 +14,7 @@ import type {
 export function doctor(
   skills: SkillRecord[],
   root: string,
-  options: { user?: boolean } = {}
+  options: { user?: boolean; compareFiles?: boolean; ignore?: string[] } = {}
 ): DoctorReport {
   const byName = new Map<string, SkillRecord[]>();
   for (const skill of skills) {
@@ -38,7 +39,8 @@ export function doctor(
       recommended,
       reason: winReason(recommended, rest),
       alternatives,
-      identicalInstructions
+      identicalInstructions,
+      ...(options.compareFiles ? { fileComparisons: rest.map(s => compareSkillFiles(recommended.skillDir, s.skillDir, options.ignore)) } : {})
     });
   }
 
@@ -69,7 +71,7 @@ export function doctor(
     runtimeResolution: "unknown",
     limitations: [
       "Cleanup ranking is not runtime precedence. Client namespaces, enablement and validity are not resolved.",
-      "Identical instructions means equal SKILL.md bytes; scripts and references are not compared.",
+      options.compareFiles ? "Supporting comparisons inspect bounded regular-file bytes and POSIX permissions; unknowns and exclusions are reported. Equality is not a deletion recommendation." : "Identical instructions means equal SKILL.md bytes; scripts and references are not compared.",
       "Token estimates describe the recommended set, not a measured session."
     ],
     alternatives: recommendations.reduce((sum, row) => sum + row.alternatives.length, 0),
@@ -170,7 +172,12 @@ export function formatDoctor(report: DoctorReport): string {
     lines.push(`    ${displayPath(row.recommended.skillFile, report.root)}`);
     lines.push(`    recommendation: ${row.reason}`);
     for (const identical of row.identicalInstructions) {
-      lines.push(`    identical instructions: ${displayPath(identical.skillFile, report.root)} — supporting files not compared`);
+      lines.push(`    identical instructions: ${displayPath(identical.skillFile, report.root)} — ${row.fileComparisons ? "see supporting-file comparison" : "supporting files not compared"}`);
+    }
+    for (const comparison of row.fileComparisons ?? []) {
+      lines.push(`    supporting files: ${comparison.status} — ${displayPath(comparison.right, report.root)}`);
+      for (const detail of [...comparison.differences, ...comparison.reasons]) lines.push(`      ${detail}`);
+      lines.push(`      ${comparison.scope}`);
     }
     for (const shadow of row.alternatives) {
       lines.push(

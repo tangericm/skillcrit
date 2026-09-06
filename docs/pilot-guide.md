@@ -4,7 +4,7 @@ Skillcrit helps maintain installed agent skills by inventorying instructions,
 reviewing alternatives and highlighting lines worth inspecting. A useful result
 can also be evidence that no cleanup is needed.
 
-Current stable release: **`0.5.2`**. The [release page](https://github.com/tangericm/skillcrit/releases/tag/v0.5.2)
+Current stable release: **`0.6.0`**. The [release page](https://github.com/tangericm/skillcrit/releases/tag/v0.6.0)
 provides the same built package published on npm, plus checksums and verification
 evidence. Use the npm install below or verify the downloaded archive.
 
@@ -13,22 +13,22 @@ evidence. Use the npm install below or verify the downloaded archive.
 Requires Node 22+ and npm. In a new empty folder:
 
 ```bash
-npm install --prefix . --save-dev --save-exact skillcrit@0.5.2 --ignore-scripts
+npm install --prefix . --save-dev --save-exact skillcrit@0.6.0 --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 ```
 
-The version must be `skillcrit 0.5.2`. The explicit `--prefix .` keeps the
+The version must be `skillcrit 0.6.0`. The explicit `--prefix .` keeps the
 installation in this folder even if an ancestor is an npm project. No `npm init`
 is needed, so folder names with spaces or Unicode work too. These commands
 work in a POSIX shell and PowerShell. Installation downloads dependencies; audit
 commands make no network requests and need no API key.
 
-For a checksum-verified download, save `skillcrit-0.5.2.tgz` and `SHA256SUMS`
+For a checksum-verified download, save `skillcrit-0.6.0.tgz` and `SHA256SUMS`
 from the same release into an empty folder, then run:
 
 ```bash
-node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.5.2.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
-npm install --prefix . --save-dev --save-exact ./skillcrit-0.5.2.tgz --ignore-scripts
+node -e "const fs=require('node:fs'),c=require('node:crypto'),f='skillcrit-0.6.0.tgz',expected=fs.readFileSync('SHA256SUMS','utf8').trim().split(/\r?\n/).find(l=>l.endsWith('  '+f))?.split(' ')[0];if(c.createHash('sha256').update(fs.readFileSync(f)).digest('hex')!==expected)throw Error('Checksum mismatch');console.log('Checksum verified')"
+npm install --prefix . --save-dev --save-exact ./skillcrit-0.6.0.tgz --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 ```
 

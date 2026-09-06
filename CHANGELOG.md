@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Add saved lint baselines and comparisons for new, resolved, changed, and unchanged findings. Incomplete scans never claim resolution; snapshots are bound to CLI version, scan scope, and effective configuration.
+- Add exact finding fingerprints and reasoned dismissals. Changed evidence reactivates findings, stale entries remain visible, and accepted findings retain an audit trail across report formats.
+- Lead text reports with prioritized actions and distinguish structural findings from heuristic signals.
+- Add optional supporting-file and permission comparisons with explicit coverage limits and unknown results.
+- Add setup diagnostics for the actual CLI/runtime paths, versions, skill discovery, and expected-version mismatches.
+- Reduce risk noise from unambiguous standalone comments while retaining active commands and ambiguous multiline content.
+- Reorganize the README around first use, actual results, and deeper documentation; refresh the icon and repository discovery metadata.
+
 ## 0.5.2 (official release)
 
 - Establish one clean initial commit and new release provenance.

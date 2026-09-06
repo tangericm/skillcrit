@@ -1,17 +1,21 @@
 # Commands and flags
 
 Inventory commands take an optional `[path]` (default: cwd) and read only,
-except that `lint --fix` writes cleanup markdown. `eval` executes task code.
+except that explicit lint exports and `dismiss` create new output files. `eval` executes task code.
 
 ## doctor / inspect
 
 ```
-skillcrit doctor [path] [--user] [--json]
+skillcrit doctor [path] [--user] [--compare-files] [--json]
 ```
 
 Recommends a copy per name for cleanup review, with alternatives and identical
 instruction files. Runtime selection is unknown. Token estimates describe the
 recommended set; risk inventory includes every scanned copy.
+
+`--compare-files` compares bounded supporting-file bytes and permission bits.
+Skipped content makes the comparison incomplete (exit 3); matching inspected
+files do not establish runtime equivalence or justify deletion.
 
 `inspect` is an alias. Prefer `doctor` in what you show the user.
 
@@ -33,6 +37,34 @@ exit 3. Filesystems without hard-link support must use `--out -`; file export
 fails closed there. `--out package.json`, `SKILL.md`, `LICENSE`, or `.env` is also refused. It
 never deletes a skill file.
 
+## Repeat audits and acknowledge findings
+
+```
+skillcrit lint [path] --save-baseline baseline.json
+skillcrit lint [path] --baseline baseline.json --dismissals dismissals.json
+skillcrit dismiss baseline.json --finding <fingerprint> --reason "Reviewed reason" --out dismissals.json
+```
+
+Save a complete baseline first. Use the same version, scope, and effective
+configuration for comparison. Copy the exact 64-character finding fingerprint
+from that audit. Dismiss only a finding the user has explicitly reviewed and
+accepted with a reason; do not waive findings merely to make the gate pass.
+Accepted findings remain visible. Changed evidence makes them active again.
+Incomplete scans cannot establish resolution. All output filenames must be new.
+To carry prior dismissals forward, add `--dismissals existing.json` to `dismiss`
+and choose a new `--out` filename. Baselines contain finding paths/messages;
+review them before sharing.
+
+## setup
+
+```
+skillcrit setup [path] [--user] [--expect-version <version>] [--json]
+```
+
+Shows the actual CLI and Node paths/versions, discovery roots, and scan coverage.
+A version mismatch exits 3. Finding a plugin directory does not establish native
+client enablement or runtime selection.
+
 ## scan
 
 ```
@@ -47,8 +79,8 @@ Flat inventory: name, version, pack, origin, description tokens. No judgement.
 skillcrit roots [path] [--user] [--json]
 ```
 
-Every skill and plugin directory the supported clients read, at project, user,
-and admin scope, and whether each exists. Use this when a skill "isn't loading"
+Known skill and plugin discovery locations at project, user, and admin scope,
+and whether each exists. Client support and enablement still need verification. Use this when a skill "isn't loading"
 and you need to know where the client is even looking.
 
 ## rules

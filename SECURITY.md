@@ -64,7 +64,7 @@ Open a security advisory on the repository:
 Please do not open a public issue for a vulnerability report. Include the
 version (`skillcrit --version`), the platform, and a minimal reproduction.
 
-Supported stable release: `0.5.2` on npm and GitHub. Version `0.5.1` also contains the current safety fixes; use 0.5.2 for new installations. Earlier RC3 and RC4 contain the cleanup-export safety fix.
+Supported stable release: `0.6.0` on npm and GitHub. Versions `0.5.1` and `0.5.2` contain the earlier cleanup-export safety fixes; use 0.6.0 for new installations. Earlier RC3 and RC4 contain the cleanup-export safety fix.
 
 ### Cleanup export in older candidates
 

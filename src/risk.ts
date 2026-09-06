@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { readInventoryText } from "./read.js";
 import { matchesIgnore, matchesIgnoredDirectory } from "./config.js";
@@ -102,15 +103,25 @@ function collect(
   if (!text) return;
   const lines = text.split(/\r?\n/);
   const seen = new Set<string>();
+  const sourceHash = createHash("sha256").update(text).digest("hex");
   let inFence = false;
+  let quote = "";
+  let language = path.extname(file).slice(1).toLowerCase();
+  // Avoid guessing lexical context around multiline strings, heredocs and continuations.
+  const ambiguous = /(?:\\\r?\n|<<|<#[\s\S]*|"""|''')/.test(text) || /`/.test(fencedOnly ? text.replace(/^\s*(?:```|~~~).*$/gm, "") : text);
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (/^\s*(?:```|~~~)/.test(line)) {
+    const fence = /^\s*(?:```|~~~)\s*([\w-]*)/.exec(line);
+    if (fencedOnly && fence) {
       inFence = !inFence;
+      quote = "";
+      language = inFence ? fence[1].toLowerCase() : "";
       continue;
     }
     if (!line.trim()) continue;
     if (fencedOnly && !inFence) continue;
+    if (!ambiguous && !quote && ((/^(?:sh|shell|bash|zsh|python|py|powershell|ps1)$/.test(language) && /^\s*#/.test(line)) ||
+        (/^(?:javascript|js|mjs|cjs|typescript|ts)$/.test(language) && /^\s*\/\//.test(line)))) continue;
     for (const pattern of PATTERNS) {
       const match = pattern.re.exec(line);
       if (!match) continue;
@@ -122,8 +133,19 @@ function collect(
         severity: RULES[pattern.id].severity,
         file,
         line: i + 1 + lineOffset,
-        evidence: truncate(match[0].trim())
+        evidence: truncate(match[0].trim()),
+        evidenceHash: createHash("sha256").update(sourceHash + "\n" + line).digest("hex")
       });
+    }
+    // Retain ambiguous multiline-string signals rather than treating a leading
+    // comment marker inside a string as an actual source comment.
+    for (let j = 0; j < line.length; j++) {
+      const ch = line[j];
+      if (ch === "\\") { j++; continue; }
+      if (quote) { if (ch === quote) quote = ""; continue; }
+      if (ch === "#" && /^(?:sh|shell|bash|zsh|python|py|powershell|ps1)$/.test(language)) break;
+      if (ch === "/" && line[j + 1] === "/" && /^(?:javascript|js|mjs|cjs|typescript|ts)$/.test(language)) break;
+      if (ch === "'" || ch === '"') quote = ch;
     }
   }
 }

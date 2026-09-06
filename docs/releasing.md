@@ -50,7 +50,7 @@ The verifier checks required files and rejects private work-output directories.
 In a different empty directory, install the exact archive:
 
 ```bash
-npm install --prefix . --save-dev --save-exact /absolute/path/to/skillcrit-0.5.2.tgz --ignore-scripts
+npm install --prefix . --save-dev --save-exact /absolute/path/to/skillcrit-0.6.0.tgz --ignore-scripts
 npm ci --ignore-scripts
 node ./node_modules/skillcrit/dist/cli.js --version
 node ./node_modules/skillcrit/dist/cli.js doctor /absolute/path/to/test-project --json
@@ -64,19 +64,19 @@ flow. Keep credentials out of chat, issues, source and logs. Security-key
 confirmation requires the account owner's interaction. Never reuse expired
 authentication links or work around account security requirements.
 
-Create an annotated tag `v0.5.2` at the reviewed, passing commit. Never move an
+Create an annotated tag `v0.6.0` at the reviewed, passing commit. Never move an
 existing release tag. Publish the exact verified archive:
 
 ```bash
-npm publish ./skillcrit-0.5.2.tgz --tag latest --access public --ignore-scripts
-npm view skillcrit@0.5.2 version dist.integrity dist-tags --json
+npm publish ./skillcrit-0.6.0.tgz --tag latest --access public --ignore-scripts
+npm view skillcrit@0.6.0 version dist.integrity dist-tags --json
 ```
 
 Use `--tag next` for prereleases. Compare registry integrity, download the npm
 archive and compare its bytes, then test a fresh registry install and lockfile
 reinstall. Do not advertise an available npm version until publication and
-installation have succeeded. Merge the reviewed PR using its exact head and
-verify the merge tree and main CI.
+installation have succeeded. Advance main to the exact reviewed and tested release commit, then verify
+the source tree and main CI. Avoid merge commits or automated coauthor trailers.
 
 Publish a GitHub release with the tested archive, SHA256SUMS, verification.json
 and sanitized evidence. Mark stable releases as latest; mark candidates as

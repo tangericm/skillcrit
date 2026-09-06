@@ -43,6 +43,8 @@ export type SkillRecord = {
 };
 
 export type RiskFinding = {
+  /** Digest of the full inspected source and matched line, before display truncation. */
+  evidenceHash?: string;
   id: RuleId;
   severity: Severity;
   /** File the signal was seen in, relative to the skill directory. */
@@ -92,6 +94,12 @@ export type CleanupAction = {
 };
 
 export type LintFinding = {
+  /** Exact occurrence ID for history and reasoned dismissal. */
+  fingerprint?: string;
+  dismissal?: { reason: string };
+  /** Every participating instruction/source file, independent of the ranked anchor. */
+  relatedFiles?: string[];
+  evidenceHash?: string;
   /** Stable rule ID. Safe to gate CI on; see src/rules.ts. */
   id: RuleId;
   rule: LintRule;
@@ -127,6 +135,8 @@ export type TokenComparison = {
 };
 
 export type LintReport = {
+  comparison?: import("./history.js").BaselineComparison;
+  dismissals?: { applied: import("./history.js").Dismissal[]; stale: import("./history.js").Dismissal[] };
   /** Present on new reports; optional for callers rendering older reports. */
   runtimeResolution?: "unknown";
   limitations?: string[];
@@ -148,6 +158,7 @@ export type LintReport = {
 
 /** One same-name cleanup group, not a runtime namespace. */
 export type SkillRecommendation = {
+  fileComparisons?: import("./compare-files.js").FileComparison[];
   name: string;
   recommended: SkillRecord;
   reason: string;

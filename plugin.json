@@ -1,11 +1,24 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "skillcrit",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "description": "Audit installed agent skills, conflicts, and context costs.",
-  "author": { "name": "Eric Tang", "email": "eric.tang22@gmail.com" },
+  "author": {
+    "name": "Eric Tang",
+    "email": "eric.tang22@gmail.com"
+  },
   "homepage": "https://github.com/tangericm/skillcrit#readme",
   "repository": "https://github.com/tangericm/skillcrit",
   "license": "MIT",
-  "keywords": ["agent-skills", "lint", "audit", "eval", "context"]
+  "keywords": [
+    "agent-skills",
+    "ai-agents",
+    "skill-audit",
+    "lint",
+    "audit",
+    "baseline",
+    "sarif",
+    "context",
+    "developer-tools"
+  ]
 }

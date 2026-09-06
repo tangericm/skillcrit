@@ -57,6 +57,9 @@ export function formatSummary(report: LintReport): string {
   const warnings = count(report, "warning");
   const info = count(report, "info");
   const t = report.tokens;
+  const active = report.findings.filter(f => !f.dismissal);
+  const structural = active.filter(f => f.rule === "spec" && f.id !== "SC1012").length;
+  const signals = active.filter(f => f.rule === "risk" || f.rule === "contention" || f.rule === "trigger-overlap" || f.rule === "always-on" || f.id === "SC1012").length;
   const lines = [
     "# skillcrit summary",
     "Runtime selection: unknown",
@@ -68,6 +71,8 @@ export function formatSummary(report: LintReport): string {
       : `~${t.afterCleanup} after recommended cleanup (no token change)`,
     `~${t.descriptionOnly} estimated catalogue tokens with descriptions only`,
     `${errors} errors  ${warnings} warnings  ${info} info`,
+    `${structural} structural findings; ${signals} heuristic signals; ${active.length - structural - signals} inventory/budget findings`,
+    ...(report.dismissals ? [`${report.dismissals.applied.length} dismissed; ${report.dismissals.stale.length} stale dismissals`] : []),
     ""
   ];
   if (report.questions.length === 0) {
@@ -101,5 +106,5 @@ function promptFor(action: CleanupAction): string {
 }
 
 function count(report: LintReport, severity: "error" | "warning" | "info"): number {
-  return report.findings.filter((f) => f.severity === severity).length;
+  return report.findings.filter((f) => !f.dismissal && f.severity === severity).length;
 }

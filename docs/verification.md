@@ -1,5 +1,30 @@
 # Release verification
 
+## 0.6.0 maintenance workflow
+
+Version 0.6.0 adds audit baselines, exact reasoned dismissals, prioritized reports,
+bounded supporting-file comparisons, setup diagnostics, and narrower handling
+of unambiguous comments in risk scans. Its release gate includes the full unit
+suite, six OS/Node CI combinations, isolated package installation and lockfile
+reinstallation, 19 shipped simulations, and ten additional repeat-audit scenarios.
+The release attachments record the actual outcomes, reviewed source commit,
+package hashes, and CI evidence. A package is ready only after those checks pass.
+
+The additional scenarios cover an initial audit on a Unicode path, unchanged
+findings, exact acceptance, changed-source reactivation, complete resolution,
+refused overwrite, malformed state, scope mismatch, setup mismatch, and differing
+supporting scripts. Regression tests also cover relocation across ancestor paths
+that alter configured ignore matching. These are maintainer-controlled tests, not external feedback.
+Native-client observations remain historical and versioned in the
+[compatibility matrix](compatibility.md); they are not fresh 0.6.0 native trials.
+
+Baselines must be regenerated after changing CLI versions. Risk rules remain
+heuristics, bounded file comparison cannot prove full package equivalence, and
+filesystem discovery cannot prove runtime enablement. No test suite establishes
+the absence of every defect.
+
+## 0.5.2 publication evidence
+
 The official [0.5.2 GitHub release](https://github.com/tangericm/skillcrit/releases/tag/v0.5.2)
 attaches `verification.json`, `package-check.json`, `simulations.json`, the built
 `skillcrit-0.5.2.tgz`, and `SHA256SUMS`. The verification record identifies the
