@@ -1,0 +1,12 @@
+.agent/state.md
+.agent/journal.md
+.DS_Store
+.superpowers/
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+skillcrit-cleanup.md
+tmp/
+graphify-out/
+*.sarif

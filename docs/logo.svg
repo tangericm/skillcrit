@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="skillcrit">
+  <title>skillcrit</title>
+  <rect width="128" height="128" rx="28" fill="#0c0c10"/>
+  <rect x="4" y="4" width="120" height="120" rx="24" fill="none" stroke="#c8ff3d" stroke-width="4"/>
+  <g fill="none">
+    <rect x="46" y="40" width="52" height="40" rx="8" fill="#cfcbbf" transform="rotate(8 72 60)"/>
+    <rect x="40" y="44" width="52" height="40" rx="8" fill="#e8e4d8" transform="rotate(3 66 64)"/>
+    <rect x="32" y="48" width="54" height="42" rx="8" fill="#f7f4ea"/>
+  </g>
+  <path d="M40 56h9v3.6h-5.4V68H40z" fill="#ff2d55"/>
+  <rect x="40" y="72" width="22" height="3.2" rx="1.6" fill="#c9c4b8"/>
+  <rect x="40" y="78.5" width="30" height="3.2" rx="1.6" fill="#c9c4b8"/>
+  <rect x="40" y="85" width="18" height="3.2" rx="1.6" fill="#c8ff3d"/>
+  <path d="M26 98L102 30" stroke="#c8ff3d" stroke-width="9" stroke-linecap="round"/>
+</svg>

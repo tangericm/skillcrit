@@ -1,0 +1,63 @@
+name: Pilot feedback
+description: Share a redacted observation from the release candidate.
+title: "Pilot: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This report is public. Keep raw reports, private paths, credentials, and skill contents local.
+        Use SECURITY.md for suspected vulnerabilities. Automated checks do not count as external pilot sessions.
+  - type: input
+    id: candidate
+    attributes:
+      label: Candidate version and archive SHA-256
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS, Node version, client and client version
+    validations:
+      required: true
+  - type: textarea
+    id: installation
+    attributes:
+      label: Installation and first useful result
+      description: Did installation need help? How long to an understandable finding? Record none if there was no useful result.
+    validations:
+      required: true
+  - type: textarea
+    id: findings
+    attributes:
+      label: Findings reviewed and decision changed
+      description: Give counts for confirmed, false positive, and unknown findings; command/exit/coverage; one changed decision or none. Use rule IDs and redacted examples.
+    validations:
+      required: true
+  - type: textarea
+    id: native
+    attributes:
+      label: Comparison with the native client
+      description: What does Skillcrit add or miss? If using the bundled skill, record discovery and the command/target actually invoked. Untested is a valid answer.
+  - type: dropdown
+    id: reuse
+    attributes:
+      label: Second-session use
+      options:
+        - Not yet observed
+        - Voluntarily reused in a later work session
+        - Repeated only to complete this exercise
+        - Chose not to reuse
+    validations:
+      required: true
+  - type: textarea
+    id: followup
+    attributes:
+      label: Follow-up date and reason
+      description: Update this issue after a later work session; describe any blocker or misleading recommendation.
+  - type: checkboxes
+    id: sharing
+    attributes:
+      label: Sharing
+      options:
+        - label: I reviewed this feedback for private information and consent to publishing these observations.
+          required: true

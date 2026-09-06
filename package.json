@@ -1,0 +1,65 @@
+{
+  "name": "skillcrit",
+  "version": "0.5.2",
+  "description": "Audit installed agent skills, conflicts, and context costs.",
+  "type": "module",
+  "bin": {
+    "skillcrit": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "skills",
+    "docs",
+    "scripts/simulate.mjs",
+    "SECURITY.md",
+    "CONTRIBUTING.md",
+    "fixtures/tasks"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "simulate": "node scripts/simulate.mjs",
+    "verify:package": "node scripts/verify-package.mjs",
+    "skillcrit": "tsx src/cli.ts"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "license": "MIT",
+  "author": "Eric Tang <eric.tang22@gmail.com>",
+  "homepage": "https://github.com/tangericm/skillcrit#readme",
+  "bugs": {
+    "url": "https://github.com/tangericm/skillcrit/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tangericm/skillcrit.git"
+  },
+  "keywords": [
+    "agent-skill",
+    "agent-skills",
+    "lint",
+    "eval",
+    "agentskills",
+    "audit",
+    "context",
+    "sarif"
+  ],
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

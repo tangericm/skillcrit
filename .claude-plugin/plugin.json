@@ -1,0 +1,8 @@
+{
+  "name": "skillcrit",
+  "version": "0.5.2",
+  "description": "Audit installed agent skills, conflicts, and context costs.",
+  "author": { "name": "Eric Tang" },
+  "license": "MIT",
+  "skills": "./skills/"
+}
